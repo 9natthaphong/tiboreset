@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:demo": "next dev",
+    "dev:demo": "node scripts/dev-demo.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "ingest": "tsx scripts/ingest.ts",
     "forecast": "tsx scripts/forecast.ts",
-    "backtest": "tsx scripts/backtest.ts"
+    "backtest": "tsx scripts/backtest.ts",
+    "seed:history": "tsx scripts/seed-history.ts"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",

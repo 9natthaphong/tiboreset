@@ -1,40 +1,210 @@
 "use client";
 
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import dynamic from "next/dynamic";
+import { useMemo, useState } from "react";
+import { ArrowRight, ChevronDown } from "lucide-react";
+import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Forecast } from "@/lib/forecasting";
+import type { HistoryPoint, ResetHistoryItem } from "@/lib/public-data-types";
 
-type HistoryPoint = { time: string; probability: number; label: string };
+const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), { ssr: false });
 
-export default function Charts({ forecast, history }: { forecast: Forecast; history: HistoryPoint[] }) {
-  const historyData = history.map((point, index) => ({
+type Range = "24H" | "7D" | "ALL";
+type ForecastView = "movement" | "signals" | "range";
+type TrendView = "live" | "resets";
+
+const chartTooltip = { background: "#101513", border: "1px solid #3e443f", color: "#f3eee2", fontFamily: "var(--font-mono)", fontSize: 11 };
+const dateLabel = (value: string) => new Date(value).toLocaleDateString("en", { month: "short", day: "numeric" });
+const contributionLabels: Record<string, string> = {
+  explicit_reset_confirmation: "Confirmed reset language",
+  explicit_reset_hint: "Direct reset language",
+  public_commitment_strength: "Public commitment",
+  milestone_proximity: "Milestone momentum",
+  milestone_velocity: "Milestone pace",
+  usage_incident_strength: "Usage pressure",
+  capacity_concern: "Capacity caution",
+  historical_analog_success_rate: "Similar past resets",
+  historical_analog_similarity: "Historical similarity",
+  recent_reset_suppression: "Cooldown effect",
+  unresolved_ambiguity_penalty: "Weak evidence penalty",
+  signal_frequency_change: "Signal activity",
+  evidence_recency: "Fresh evidence",
+  promotional_signal: "Promotion activity",
+  product_launch_signal: "Launch activity",
+  community_poll_signal: "Community polling",
+  time_since_last_reset: "Time since last reset",
+  source_reliability: "Source reliability",
+};
+const contributionExplanations: Record<string, string> = {
+  explicit_reset_confirmation: "A direct reset confirmation is the strongest evidence the model can receive.",
+  explicit_reset_hint: "Recent wording suggests reset intent without treating playful or ambiguous language as confirmation.",
+  public_commitment_strength: "A public commitment makes a future reset more plausible, weighted by extraction confidence.",
+  milestone_proximity: "The latest public milestone appears close to a known reset trigger.",
+  milestone_velocity: "The observed pace toward the next milestone changes how soon a reset could become relevant.",
+  usage_incident_strength: "Public usage pressure can increase the case for a limit intervention.",
+  capacity_concern: "Capacity uncertainty can reduce confidence that a broad reset will happen soon.",
+  historical_analog_success_rate: "Similar verified situations were followed by resets inside the selected horizon.",
+  historical_analog_similarity: "Current evidence resembles earlier verified signal windows.",
+  recent_reset_suppression: "A recent reset makes another immediate reset less likely.",
+  unresolved_ambiguity_penalty: "Unresolved language is discounted until stronger evidence appears.",
+  signal_frequency_change: "Reset-related posts are appearing more or less often than the recent baseline.",
+  evidence_recency: "Fresh evidence carries more weight than older posts.",
+  source_reliability: "Evidence from the monitored official account receives a reliability adjustment.",
+};
+
+const viewOrder: ForecastView[] = ["movement", "signals", "range"];
+
+export default function Charts({ forecast, history, resetHistory }: { forecast: Forecast; history: HistoryPoint[]; resetHistory: ResetHistoryItem[] }) {
+  const [view, setView] = useState<ForecastView>("movement");
+  const [range, setRange] = useState<Range>("ALL");
+  const [trendView, setTrendView] = useState<TrendView>("live");
+  const [focused, setFocused] = useState<HistoryPoint | null>(null);
+  const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const latestTime = Date.parse(history.at(-1)?.time ?? forecast.generatedAt);
+  const filtered = useMemo(() => history.filter(point => {
+    if (range === "ALL") return true;
+    return Date.parse(point.time) >= latestTime - (range === "24H" ? 86_400_000 : 7 * 86_400_000);
+  }), [history, latestTime, range]);
+  const historyData = filtered.map((point, index) => ({
     ...point,
-    low: Math.max(0, point.probability - 11),
-    band: Math.min(100, point.probability + 13) - Math.max(0, point.probability - 11),
-    verified: index === 1 ? point.probability : null,
-    negative: index === 0 ? point.probability : null,
-    current: index === history.length - 1 ? point.probability : null,
+    bandBase: point.low,
+    bandRange: Math.max(0, point.high - point.low),
+    relevantMarker: point.evidencePostId && (point.impact ?? 0) >= 0 ? point.probability : null,
+    negativeMarker: (point.impact ?? 0) < 0 ? point.probability : null,
+    verifiedMarker: point.verified ? point.probability : null,
+    currentMarker: index === filtered.length - 1 ? point.probability : null,
+    before: history[Math.max(0, history.findIndex(item => item.forecastId === point.forecastId) - 1)]?.probability ?? point.probability,
   }));
-  const contribution = forecast.contributions.slice(0, 9).map(x => ({ name: x.label, value: +x.logOddsContribution.toFixed(2) }));
-  const histogram = forecast.simulation.histogram.map(x => ({ range: `${Math.round(x.from * 100)}–${Math.round(x.to * 100)}`, count: x.count }));
-  const tooltip = { background: "#101513", border: "1px solid #3e443f", color: "#f3eee2", fontFamily: "var(--font-mono)", fontSize: 11 };
+  const positives = forecast.contributions.filter(item => item.logOddsContribution > 0).sort((a, b) => b.logOddsContribution - a.logOddsContribution).slice(0, 4);
+  const negatives = forecast.contributions.filter(item => item.logOddsContribution < 0).sort((a, b) => a.logOddsContribution - b.logOddsContribution).slice(0, 3);
+  const contribution = [...positives, ...negatives].map(item => ({
+    name: contributionLabels[item.featureName] ?? item.label,
+    value: Number(item.logOddsContribution.toFixed(2)),
+    technicalName: item.featureName,
+    explanation: contributionExplanations[item.featureName] ?? "This factor changes the deterministic model estimate using its configured expert-prior coefficient.",
+  }));
+  const maxContribution = Math.max(...contribution.map(item => Math.abs(item.value)), 0.01);
+  const first = history[0];
+  const last = history.at(-1);
+  const delta = first && last ? last.probability - first.probability : 0;
+  const trackingDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(first?.time ?? forecast.generatedAt));
+  const summary = history.length >= 2 && first && last
+    ? `Reset probability ${delta >= 0 ? "increased" : "decreased"} from ${first.probability}% to ${last.probability}%${last.label ? ` after ${last.label.toLowerCase()} evidence` : ""}.`
+    : `Live forecast tracking began on ${trackingDate}. More points will appear as new signals are processed.`;
 
-  return <div className="charts-sacred">
-    <article className="chart-panel history-panel">
-      <header><div><span>PROBABILITY HISTORY</span><h3>Forecast movement over time</h3></div><p>Gold forecast · cyan verified evidence · orange risk</p></header>
-      <div className="chart-scroll"><ResponsiveContainer width="100%" height={390}><ComposedChart data={historyData} margin={{ top: 22, right: 22, left: 2, bottom: 8 }}>
-        <defs><linearGradient id="goldBand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d9a441" stopOpacity=".25"/><stop offset="1" stopColor="#d9a441" stopOpacity=".02"/></linearGradient></defs>
-        <CartesianGrid stroke="#26312e" vertical={false}/><XAxis dataKey="time" tickFormatter={x => new Date(x).toLocaleDateString("en", { month: "short", day: "numeric" })} stroke="#717771" tickLine={false}/><YAxis domain={[0, 100]} unit="%" stroke="#717771" tickLine={false}/>
-        <Tooltip contentStyle={tooltip} labelFormatter={x => new Date(x).toLocaleString()} formatter={(value, name, props) => name === "probability" ? [`${value}% · ${props.payload.label}`, "Forecast / evidence"] : [value, name]}/>
-        <Area dataKey="low" stackId="interval" stroke="none" fill="transparent"/><Area dataKey="band" stackId="interval" stroke="none" fill="url(#goldBand)"/>
-        <Line dataKey="probability" stroke="#d9a441" strokeWidth={3} dot={{ fill: "#d9a441", r: 3, strokeWidth: 0 }} activeDot={{ fill: "#ffd36a", r: 7 }}/>
-        <Line dataKey="verified" stroke="none" dot={{ fill: "#4bd8ee", r: 5, stroke: "#101513", strokeWidth: 2 }}/><Line dataKey="negative" stroke="none" dot={{ fill: "#ff835e", r: 5, stroke: "#101513", strokeWidth: 2 }}/><Line dataKey="current" stroke="none" dot={{ fill: "#ffd36a", r: 7, stroke: "#fff3c9", strokeWidth: 2 }}/>
-      </ComposedChart></ResponsiveContainer></div>
-      <p className="chart-summary">From {history[0].probability}% to {history.at(-1)?.probability}% across {history.length} evidence-linked snapshots. Focus or hover points to inspect the responsible evidence.</p>
-    </article>
-    <div className="chart-pair">
-      <article className="chart-panel"><header><div><span>FEATURE CONTRIBUTIONS</span><h3>What moved the odds</h3></div><p>Log-odds</p></header><div className="chart-scroll"><ResponsiveContainer width="100%" height={370}><BarChart data={contribution} layout="vertical" margin={{ left: 18, right: 22 }}><CartesianGrid stroke="#26312e" horizontal={false}/><XAxis type="number" stroke="#717771"/><YAxis dataKey="name" type="category" width={150} stroke="#a9aaa3" fontSize={11}/><ReferenceLine x={0} stroke="#a9aaa3"/><Tooltip contentStyle={tooltip}/><Bar dataKey="value">{contribution.map((x, i) => <Cell key={i} fill={x.value >= 0 ? "#d9a441" : "#ff835e"}/>)}</Bar></BarChart></ResponsiveContainer></div><p className="chart-summary">Baseline prior is held in the model intercept; displayed contributions reconcile in log-odds space.</p></article>
-      <article className="chart-panel"><header><div><span>MONTE CARLO</span><h3>Probability distribution</h3></div><p>{forecast.simulation.count.toLocaleString()} runs</p></header><div className="chart-scroll"><ResponsiveContainer width="100%" height={370}><BarChart data={histogram}><CartesianGrid stroke="#26312e" vertical={false}/><XAxis dataKey="range" stroke="#717771" fontSize={10}/><YAxis stroke="#717771"/><Tooltip contentStyle={tooltip}/><Bar dataKey="count" fill="#276c77" radius={[2, 2, 0, 0]}>{histogram.map((_, i) => <Cell key={i} fill={i >= 6 ? "#d9a441" : "#276c77"}/>)}</Bar></BarChart></ResponsiveContainer></div><p className="chart-summary">Median {Math.round(forecast.simulation.median * 100)}% · central 80% interval {Math.round(forecast.simulation.p10 * 100)}–{Math.round(forecast.simulation.p90 * 100)}% · {forecast.modelVersion}</p></article>
+  const selectView = (next: ForecastView) => setView(next);
+  const onTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const current = viewOrder.indexOf(view);
+    let next = current;
+    if (event.key === "ArrowRight") next = (current + 1) % viewOrder.length;
+    else if (event.key === "ArrowLeft") next = (current - 1 + viewOrder.length) % viewOrder.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = viewOrder.length - 1;
+    else return;
+    event.preventDefault();
+    const nextView = viewOrder[next];
+    setView(nextView);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-forecast-tab="${nextView}"]`)?.focus());
+  };
+
+  return <div className="forecast-visuals">
+    <div className="forecast-view-tabs" role="tablist" aria-label="Forecast view">
+      {viewOrder.map(item => <button
+        key={item}
+        type="button"
+        role="tab"
+        id={`forecast-tab-${item}`}
+        aria-controls={`forecast-panel-${item}`}
+        aria-selected={view === item}
+        tabIndex={view === item ? 0 : -1}
+        className={view === item ? "active" : ""}
+        data-forecast-tab={item}
+        onClick={() => selectView(item)}
+        onKeyDown={onTabKeyDown}
+      ><span>{item.toUpperCase()}</span><ArrowRight size={15}/></button>)}
     </div>
-    <article className="chart-panel calibration-panel"><header><div><span>CALIBRATION / BACKTESTS</span><h3>Reliability under sparse evidence</h3></div><p>Demo sample warning</p></header><svg viewBox="0 0 900 220" role="img" aria-label="Demo reliability diagram"><line x1="70" y1="180" x2="830" y2="30"/><polyline points="70,180 230,162 390,128 550,95 710,68 830,40"/><g><circle cx="230" cy="162" r="7"/><circle cx="390" cy="128" r="7"/><circle cx="550" cy="95" r="7"/><circle cx="710" cy="68" r="7"/></g><text x="70" y="210">0% predicted</text><text x="760" y="210">100% predicted</text></svg><p className="chart-summary">Mean Brier 0.19 vs 0.25 baseline. Six synthetic tests are too few for performance claims.</p></article>
+
+    <div className="forecast-active-view">
+      {view === "movement" && <section id="forecast-panel-movement" role="tabpanel" aria-labelledby="forecast-tab-movement" className="forecast-view-panel movement-view" data-testid="probability-trend">
+        <header className="forecast-view-heading"><div><span>{trendView === "live" ? "RESET PROBABILITY TREND" : "VERIFIED RESET CALENDAR"}</span><h3>{trendView === "live" ? "How the forecast is moving" : "Milestone announcements over time"}</h3></div><div className="trend-view-toggle" aria-label="Movement data source"><button type="button" className={trendView === "live" ? "active" : ""} onClick={() => setTrendView("live")} aria-pressed={trendView === "live"}>LIVE FORECAST</button><button type="button" className={trendView === "resets" ? "active" : ""} onClick={() => setTrendView("resets")} aria-pressed={trendView === "resets"}>RESET HISTORY</button></div></header>
+        {trendView === "live" ? <>
+          {history.length < 2 ? <div className="sparse-forecast-state" data-testid="sparse-forecast-state">
+            <span>LIVE TRACKING HAS JUST STARTED</span>
+            <strong>{Math.round(forecast.probability * 100)}%</strong>
+            <h4>The first forecast was recorded on {trackingDate}.</h4>
+            <p>New points will appear when fresh signals change the model.</p>
+            <button type="button" onClick={() => setTrendView("resets")}>View reset history <ArrowRight size={16}/></button>
+            <small>One actual forecast snapshot · no historical probabilities inferred</small>
+          </div> : <>
+            <div className="range-toggle trend-range-toggle" aria-label="Forecast history range">{(["24H", "7D", "ALL"] as Range[]).map(option => <button type="button" key={option} className={option === range ? "active" : ""} onClick={() => setRange(option)} aria-pressed={option === range}>{option}</button>)}</div>
+            <div className="chart-scroll"><ResponsiveContainer width="100%" height={360}><ComposedChart data={historyData} margin={{ top: 22, right: 22, left: 2, bottom: 8 }}>
+              <defs><linearGradient id="goldBand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d9a441" stopOpacity=".24"/><stop offset="1" stopColor="#d9a441" stopOpacity=".025"/></linearGradient></defs>
+              <XAxis dataKey="time" tickFormatter={dateLabel} stroke="#717771" tickLine={false} axisLine={false}/><YAxis domain={[0, 100]} unit="%" stroke="#717771" tickLine={false} axisLine={false} width={42}/>
+              <Tooltip contentStyle={chartTooltip} labelFormatter={value => new Date(String(value)).toLocaleString()} formatter={(value, name, item) => name === "probability" ? [`${value}% · ${String(item.payload.label)}`, `Forecast (${item.payload.before}% → ${value}%)`] : [value, name]}/>
+              <Area dataKey="bandBase" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false}/><Area dataKey="bandRange" stackId="interval" stroke="none" fill="url(#goldBand)" animationDuration={800}/>
+              <Line dataKey="probability" stroke="#ffd36a" strokeWidth={3} dot={false} activeDot={{ fill: "#ffd36a", r: 6, stroke: "#fff3c9", strokeWidth: 1 }} animationDuration={850}/>
+              <Line dataKey="relevantMarker" stroke="none" dot={{ fill: "#4bd8ee", r: 5, stroke: "#101513", strokeWidth: 2 }}/><Line dataKey="negativeMarker" stroke="none" dot={{ fill: "#ff835e", r: 5, stroke: "#101513", strokeWidth: 2 }}/><Line dataKey="verifiedMarker" stroke="none" dot={{ fill: "#f3eee2", r: 6, stroke: "#ffd36a", strokeWidth: 2 }}/><Line dataKey="currentMarker" stroke="none" dot={{ fill: "#ffd36a", r: 7, stroke: "#fff3c9", strokeWidth: 2 }}/>
+            </ComposedChart></ResponsiveContainer></div>
+            <div className="chart-legend" aria-hidden="true"><span><i className="gold"/>Probability</span><span><i className="cyan"/>Tibo signal</span><span><i className="orange"/>Negative signal</span></div>
+            <p className="chart-summary" aria-live="polite">{summary}</p>
+            <div className="annotation-focus" aria-label="Evidence-linked forecast changes">{history.filter(point => point.evidencePostId).map((point, index) => { const before = history[Math.max(0, index - 1)]?.probability ?? point.probability; const change = point.probability - before; return <button type="button" key={point.forecastId} onFocus={() => setFocused(point)} onMouseEnter={() => setFocused(point)} onMouseLeave={() => setFocused(null)} aria-label={`${point.label}. ${point.probability}% forecast, ${change >= 0 ? "plus" : "minus"} ${Math.abs(change)} points.`}><i className={(point.impact ?? 0) < 0 ? "negative-dot" : "signal-dot"}/><span>{dateLabel(point.time)}</span></button>; })}</div>
+            {focused && <div className="annotation-card" role="status"><strong>{focused.excerpt ?? focused.label}</strong><span>{new Date(focused.time).toLocaleString()} · {focused.eventType?.replaceAll("_", " ")}</span><b>{focused.impact && focused.impact > 0 ? "+" : ""}{focused.impact ?? 0} pts</b></div>}
+          </>}
+        </> : <ResetCalendar resetHistory={resetHistory}/>} 
+      </section>}
+
+      {view === "signals" && <section id="forecast-panel-signals" role="tabpanel" aria-labelledby="forecast-tab-signals" className="forecast-view-panel signals-view" data-testid="contribution-chart">
+        <header className="forecast-view-heading"><div><span>WHAT MOVED THE FORECAST</span><h3>Signals ranked by impact</h3></div><p>Clear language first. Technical math stays one layer deeper.</p></header>
+        <div className="signal-ranking"><div className="signal-rank-row baseline-signal"><span>00</span><div><b>Baseline prior</b><small>Starting point before current evidence</small></div><em>Expert prior</em></div>{contribution.map((item, index) => {
+          const magnitude = Math.abs(item.value);
+          const strength = magnitude >= 0.7 ? "Strong" : magnitude >= 0.3 ? "Moderate" : "Slight";
+          const selected = selectedSignal === item.technicalName;
+          return <div className={`signal-rank-wrap ${item.value >= 0 ? "positive-factor" : "negative-factor"}`} key={item.technicalName}>
+            <button type="button" className="signal-rank-row" aria-expanded={selected} onClick={() => setSelectedSignal(selected ? null : item.technicalName)}>
+              <span>{String(index + 1).padStart(2, "0")}</span><div><b>{item.name}</b><small>{strength} {item.value >= 0 ? "positive" : "negative"}</small><i><u style={{ width: `${magnitude / maxContribution * 100}%` }}/></i></div><em>{item.value > 0 ? "+" : ""}{item.value}</em><ChevronDown size={16}/>
+            </button>
+            {selected && <p className="signal-explanation">{item.explanation}</p>}
+          </div>;
+        })}</div>
+        <details className="calculation-drawer"><summary><span><b>VIEW CALCULATION</b><small>Technical feature names and configured values</small></span><ChevronDown size={17}/></summary><div>{forecast.contributions.map(item => <dl key={item.featureName}><dt>{contributionLabels[item.featureName] ?? item.label}</dt><dd><code>{item.featureName}</code><span>value {item.normalizedValue.toFixed(2)}</span><span>coefficient {item.coefficient.toFixed(2)}</span><b>{item.logOddsContribution.toFixed(3)}</b></dd></dl>)}</div></details>
+      </section>}
+
+      {view === "range" && <section id="forecast-panel-range" role="tabpanel" aria-labelledby="forecast-tab-range" className="forecast-view-panel range-view" data-testid="forecast-range">
+        <header className="forecast-view-heading"><div><span>FORECAST RANGE</span><h3>Uncertainty, without the statistical fog.</h3></div><p>{forecast.simulation.count.toLocaleString()} seeded simulations</p></header>
+        <div className="range-editorial-values"><div><span>CURRENT ESTIMATE</span><strong data-testid="chart-probability">{Math.round(forecast.probability * 100)}%</strong></div><div><span>LIKELY RANGE</span><b>{Math.round(forecast.credibleIntervalLow * 100)}–{Math.round(forecast.credibleIntervalHigh * 100)}%</b></div></div>
+        <div className="probability-range editorial-range" role="img" aria-label={`Likely probability range from ${Math.round(forecast.credibleIntervalLow * 100)} to ${Math.round(forecast.credibleIntervalHigh * 100)} percent, current estimate ${Math.round(forecast.probability * 100)} percent`}>
+          <i style={{ left: `${forecast.credibleIntervalLow * 100}%`, width: `${(forecast.credibleIntervalHigh - forecast.credibleIntervalLow) * 100}%` }}/>
+          <b style={{ left: `${forecast.probability * 100}%` }}><span>{Math.round(forecast.probability * 100)}%</span></b>
+          <small className="range-low" style={{ left: `${forecast.credibleIntervalLow * 100}%` }}>{Math.round(forecast.credibleIntervalLow * 100)}%</small>
+          <small className="range-high" style={{ left: `${forecast.credibleIntervalHigh * 100}%` }}>{Math.round(forecast.credibleIntervalHigh * 100)}%</small>
+        </div>
+        <p className="range-confidence-copy">In 80% of simulations, the result fell inside this range.</p>
+      </section>}
+    </div>
+
+    <details className="advanced-diagnostics" id="method" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)}>
+      <summary><span className="diagnostic-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="diagnostic-open-copy">OPEN ADVANCED DIAGNOSTICS</b><b className="diagnostic-close-copy">CLOSE ADVANCED DIAGNOSTICS</b><small>Histogram, calibration, coefficients and audit details</small></span><ChevronDown size={18}/></summary>
+      {diagnosticsOpen && <AdvancedDiagnostics forecast={forecast}/>} 
+    </details>
+  </div>;
+}
+
+function ResetCalendar({ resetHistory }: { resetHistory: ResetHistoryItem[] }) {
+  const records = resetHistory
+    .filter(item => item.milestoneUsers && item.milestoneUsers >= 3_000_000 && item.milestoneUsers <= 9_000_000)
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  if (!records.length) return <div className="reset-calendar-empty">No verified reset announcements are available.</div>;
+  const start = Date.parse(records[0].date);
+  const end = Date.parse(records.at(-1)!.date);
+  const span = Math.max(1, end - start);
+  const position = (date: string) => 4 + ((Date.parse(date) - start) / span) * 92;
+  return <div className="reset-calendar" data-testid="reset-history-calendar">
+    <div className="calendar-axis" role="img" aria-label={`Verified reset announcements from ${dateLabel(records[0].date)} to ${dateLabel(records.at(-1)!.date)}`}>
+      <span className="axis-start">{dateLabel(records[0].date)}</span><span className="axis-end">{dateLabel(records.at(-1)!.date)}</span>
+      {records.map(record => <span className="calendar-marker" key={record.id} style={{ left: `${position(record.date)}%` }} title={`${(record.milestoneUsers ?? 0) / 1_000_000}M · ${record.type} · ${dateLabel(record.date)}`} tabIndex={0} aria-label={`${(record.milestoneUsers ?? 0) / 1_000_000} million users, ${record.type} reset announcement, ${dateLabel(record.date)}`}><i/><b>{(record.milestoneUsers ?? 0) / 1_000_000}M</b></span>)}
+    </div>
+    <div className="calendar-record-grid">{records.map(record => <article key={record.id}><span>{record.displayDateThailand ?? record.date.slice(0, 10)}</span><strong>{(record.milestoneUsers ?? 0) / 1_000_000}M</strong><b>{record.type === "scheduled" ? "SCHEDULED" : record.type.toUpperCase()}</b></article>)}</div>
+    <p>Verified announcement dates only. Reset types are categorical and are not plotted on the probability axis.</p>
   </div>;
 }

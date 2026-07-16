@@ -1,11 +1,12 @@
-import { currentForecast, state } from "@/lib/demo-store";
 import demo from "@/data/demo.json";
 import { OracleExperience } from "@/components/oracle-experience";
+import { getPublicSnapshot } from "@/lib/public-data";
+import { findHistoricalAnalogWindows } from "@/lib/historical-data";
 
 export const dynamic = "force-dynamic";
 
-export default function Page() {
-  const store = state();
-  const history = store.forecasts.map((forecast, index) => ({ time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), label: demo.history[index]?.label ?? "New forecast evidence" }));
-  return <OracleExperience initialForecast={currentForecast()} evidence={store.evidence} history={history} timeline={demo.timeline} analogs={demo.analogs} renderedAt={new Date().toISOString()}/>;
+export default async function Page() {
+  const snapshot = await getPublicSnapshot();
+  const analogs = snapshot.forecast.mode === "live" ? findHistoricalAnalogWindows(snapshot.forecast.features, snapshot.forecast.dataCutoff).map(item => ({ date: item.eventAt, eventType: item.eventCategory, similarity: Math.round(item.similarity * 100), outcome: item.verificationNotes, source: item.sourceExcerpt, followed: item.resetFollowedWithinHorizon, forecastBefore: item.forecastBefore == null ? undefined : Math.round(item.forecastBefore * 100) })) : demo.analogs.map(item => ({ ...item, followed: item.followed as boolean | null }));
+  return <OracleExperience initialForecast={snapshot.forecast} evidence={snapshot.evidence} history={snapshot.history} latestPosts={snapshot.latestPosts} resetHistory={snapshot.resetHistory} historicalDataset={snapshot.historicalDataset} health={snapshot.health} analogs={analogs} renderedAt={new Date().toISOString()}/>;
 }

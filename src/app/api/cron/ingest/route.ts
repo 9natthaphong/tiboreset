@@ -1,1 +1,16 @@
-import{apiError}from"@/lib/validation";export async function POST(req:Request){const auth=req.headers.get("authorization")?.replace("Bearer ","");if(process.env.CRON_SECRET&&auth!==process.env.CRON_SECRET)return apiError("UNAUTHORIZED","Unauthorized",401);return Response.json({ok:true,data:{runId:crypto.randomUUID(),status:"success",source:"fixture",postsRead:0,postsInserted:0,postsAnalyzed:0,forecastChanged:false,durationMs:1}})}
+import { runConfiguredIngestion } from "@/lib/ingestion/configured";
+import { isAuthorizedCron } from "@/lib/ingestion/auth";
+import { apiError } from "@/lib/validation";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request) {
+  if (!process.env.CRON_SECRET) return apiError("CRON_NOT_CONFIGURED", "Cron ingestion is unavailable", 503);
+  if (!isAuthorizedCron(request.headers.get("authorization"), process.env.CRON_SECRET)) return apiError("UNAUTHORIZED", "Unauthorized", 401);
+  try {
+    const report = await runConfiguredIngestion();
+    return Response.json({ ok: true, data: report }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return apiError("INGESTION_FAILED", "Ingestion failed; a safe audit record was stored", 502);
+  }
+}

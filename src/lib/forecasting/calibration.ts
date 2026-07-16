@@ -1,2 +1,3 @@
 export const brierScore=(p:number,outcome:boolean)=>(p-(outcome?1:0))**2;
 export function calibrationBuckets(rows:{probability:number;outcome:boolean}[]){return Array.from({length:5},(_,i)=>{const xs=rows.filter(r=>r.probability>=i*.2&&(i===4?r.probability<=1:r.probability<(i+1)*.2));return{from:i*.2,to:(i+1)*.2,count:xs.length,predicted:xs.length?xs.reduce((s,r)=>s+r.probability,0)/xs.length:0,observed:xs.length?xs.filter(r=>r.outcome).length/xs.length:0}})}
+export async function calibrationFromVerifiedSeeds(){const{historicalCalibrationRows}=await import("@/lib/historical-data");return calibrationBuckets(historicalCalibrationRows())}

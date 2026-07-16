@@ -1,0 +1,43 @@
+import type { Extraction } from "@/lib/extraction/schema";
+import type { Forecast } from "@/lib/forecasting";
+import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
+
+export type StoredAccount = SocialAccount & { databaseId: string; latestProcessedPostId?: string };
+export type StoredPost = { databaseId: string; platformPostId: string };
+export type StoredExtraction = { databaseId: string };
+
+export type ExtractionResult = {
+  extraction: Extraction;
+  extractionVersion: string;
+  source: "openai" | "local_fallback" | "local";
+  fallbackReason?: string;
+};
+
+export type IngestionReport = {
+  runId: string;
+  status: "success";
+  source: "x";
+  accountResolved: boolean;
+  postsRead: number;
+  postsInserted: number;
+  postsAnalyzed: number;
+  forecastChanged: boolean;
+  forecastId: string | null;
+  durationMs: number;
+  completedAt: string;
+  xResourcesConsumed: number;
+};
+
+export interface IngestionRepository {
+  startRun(input: { source: "x"; startedAt: string }): Promise<string>;
+  completeRun(runId: string, report: IngestionReport): Promise<void>;
+  failRun(runId: string, input: { completedAt: string; durationMs: number; safeError: string; postsRead: number; postsInserted: number; postsAnalyzed: number; xResourcesConsumed: number }): Promise<void>;
+  findAccount(username: string): Promise<StoredAccount | null>;
+  upsertAccount(account: SocialAccount): Promise<StoredAccount>;
+  findExistingPostIds(platformPostIds: string[]): Promise<Set<string>>;
+  insertPost(input: { account: StoredAccount; post: SocialPost; localScreen: Extraction }): Promise<StoredPost>;
+  insertExtraction(input: { post: StoredPost; result: ExtractionResult; forecastImpact: number }): Promise<StoredExtraction>;
+  loadForecastEvidence(): Promise<import("@/lib/forecasting").Evidence[]>;
+  saveForecast(forecast: Forecast): Promise<string>;
+  updateLatestProcessedPostId(accountId: string, platformPostId: string, updatedAt: string): Promise<void>;
+}
