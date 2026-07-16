@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Generated QA artifacts
+artifacts/screenshots/
+test-results/
+playwright-report/
+blob-report/
+
+# Local agent tooling
+.agents/
+skills-lock.json
