@@ -1,0 +1,1 @@
+import{evaluateNotifications}from"@/lib/demo-store";import{apiError}from"@/lib/validation";export async function POST(req:Request){const auth=req.headers.get("authorization")?.replace("Bearer ","");if(process.env.CRON_SECRET&&auth!==process.env.CRON_SECRET)return apiError("UNAUTHORIZED","Unauthorized",401);return Response.json({ok:true,data:evaluateNotifications()})}

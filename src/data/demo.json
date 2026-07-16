@@ -1,0 +1,11 @@
+{
+ "evidence":[
+  {"id":"ev-1","postId":"demo-101","postedAt":"2026-07-09T08:00:00.000Z","excerpt":"Demo scenario: Codex demand is climbing; capacity remains the constraint.","eventType":"capacity_signal","confidence":0.78,"verified":false,"url":"#demo-evidence","effect":-3,"capacityConcern":0.72},
+  {"id":"ev-2","postId":"demo-102","postedAt":"2026-07-11T12:00:00.000Z","excerpt":"Demo scenario: 850,000 of 1,000,000 users reached in a fictional milestone.","eventType":"milestone_progress","confidence":0.9,"verified":false,"url":"#demo-evidence","effect":8,"milestoneCurrent":850000,"milestoneTarget":1000000,"commitmentStrength":0.6},
+  {"id":"ev-3","postId":"demo-103","postedAt":"2026-07-14T16:00:00.000Z","excerpt":"Demo scenario: should we let the tokens flow again soon?","eventType":"community_poll","confidence":0.69,"verified":false,"url":"#demo-evidence","effect":5,"commitmentStrength":0.3},
+  {"id":"ev-4","postId":"demo-104","postedAt":"2026-07-16T04:20:00.000Z","excerpt":"Demo scenario: milestone nearly reached; considering another reset.","eventType":"reset_hint","confidence":0.82,"verified":false,"url":"#demo-evidence","effect":13,"commitmentStrength":0.72,"milestoneCurrent":970000,"milestoneTarget":1000000}
+ ],
+ "history":[{"time":"2026-07-09T08:00:00Z","probability":31,"label":"Capacity signal"},{"time":"2026-07-11T12:00:00Z","probability":43,"label":"Milestone progress"},{"time":"2026-07-14T16:00:00Z","probability":49,"label":"Community poll"},{"time":"2026-07-16T04:20:00Z","probability":67,"label":"Reset hint"}],
+ "timeline":[{"id":"reset-demo-a","date":"2026-05-12T16:00:00Z","type":"full","reason":"Synthetic backtest fixture","description":"Demo-only verified reset outcome. Not a real historical claim.","included":true,"forecastBefore":63}],
+ "analogs":[{"date":"2026-05-12","eventType":"milestone_progress","similarity":82,"outcome":"Reset followed in demo fixture","source":"Synthetic scenario A","followed":true},{"date":"2026-03-08","eventType":"capacity_signal","similarity":64,"outcome":"No reset in horizon","source":"Synthetic scenario B","followed":false},{"date":"2026-01-18","eventType":"reset_hint","similarity":61,"outcome":"Reset followed in demo fixture","source":"Synthetic scenario C","followed":true}]
+}

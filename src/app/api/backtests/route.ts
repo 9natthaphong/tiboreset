@@ -1,0 +1,1 @@
+import demo from"@/data/demo.json";export async function GET(){return Response.json({ok:true,data:{tests:6,meanBrier:.19,baselineBrier:.25,directionalAccuracy:.67,warning:"Demo fixture; sample is too small for performance claims.",timeline:demo.timeline}})}

@@ -1,0 +1,1 @@
+import Link from"next/link";export default function Manage(){return<main className="status-page"><p className="eyebrow">RESET ORACLE / PREFERENCES</p><h1>Alert preferences</h1><p>The tokenized preference link identifies only this subscription. Permanent unsubscribe is available from every message.</p><Link href="/">Return to forecast →</Link></main>}

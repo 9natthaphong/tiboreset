@@ -1,0 +1,1 @@
+import{confirm,state}from"@/lib/demo-store";export async function POST(){const s=state().subscriptions.find(x=>x.status==="pending");return Response.json({ok:!!s,data:s?.rawConfirmationToken&&confirm(s.rawConfirmationToken)})}

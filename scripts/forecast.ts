@@ -1,0 +1,1 @@
+import demo from"../src/data/demo.json";import{forecastFromEvidence,type Evidence}from"../src/lib/forecasting";console.log(JSON.stringify(forecastFromEvidence(demo.evidence as Evidence[],new Date().toISOString()),null,2));

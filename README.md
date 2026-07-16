@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WILL TIBO RESET? — RESET ORACLE
 
-## Getting Started
+An unofficial experimental forecasting system for public Codex reset signals. The LLM can extract evidence, but the displayed probability is produced by a deterministic, versioned six-hour logistic hazard model with seeded Monte Carlo uncertainty.
 
-First, run the development server:
+## Demo Mode quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev:demo
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`. No credentials are required. Every synthetic item is labeled Demo Data. Subscribe, then open `/lab` to simulate confirmation, a 70% crossing, deduplication, confirmed reset, and local email previews.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Live Mode
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example` to `.env.local`, set `NEXT_PUBLIC_APP_MODE=live`, then add X, Supabase, OpenAI, and Resend credentials. Missing optional credentials never crash startup; email falls back to the Demo Outbox. Apply `supabase/migrations` in order. See [Live Setup](docs/LIVE_SETUP.md).
 
-## Learn More
+## Commands
 
-To learn more about Next.js, take a look at the following resources:
+`npm run dev`, `dev:demo`, `build`, `lint`, `typecheck`, `test`, `test:e2e`, `ingest`, `forecast`, and `backtest` are supported.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture and data
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Official X API v2 adapters only; no scraping.
+- OpenAI Responses API/strict extraction is designed as a replaceable extractor. Demo Mode uses a visibly labeled deterministic heuristic.
+- Supabase RLS exposes approved public forecast data only. The service role stays server-side.
+- Resend is enabled only with `RESEND_API_KEY` and `EMAIL_FROM`.
+- Tokens are random, stored as SHA-256 hashes, and confirmation expires.
+- Expert-prior coefficients are not claimed as trained. Synthetic backtests do not establish accuracy.
 
-## Deploy on Vercel
+## Cinematic image usage
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The active hero uses the supplied video and does not fabricate or hotlink a portrait. The optional legacy still paths remain `public/cinematic/tibo-opening.webp` and `public/cinematic/tibo-ending.webp`; only add images you have permission to use.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Cinematic video hero
+
+`assets/TIBORESET.mp4` remains the untouched 4K source master. The browser uses the derived `public/cinematic/tiboreset-hero.mp4`: a silent 1080p fast-start H.264 encode with half-second keyframes for bidirectional GSAP/ScrollTrigger scrubbing. Desktop and mobile use the same smoothed scroll-to-time mapping; reduced-motion mode skips pinning and exposes a readable late-frame composition.
+
+## Disclaimer
+
+Unofficial experimental project. Not affiliated with OpenAI or X. No synthetic event is presented as a real historical fact.

@@ -1,0 +1,1 @@
+import{forecastFromEvidence}from"@/lib/forecasting";import{state}from"@/lib/demo-store";export async function POST(){const f=forecastFromEvidence(state().evidence,new Date().toISOString());state().forecasts.push(f);return Response.json({ok:true,data:f})}

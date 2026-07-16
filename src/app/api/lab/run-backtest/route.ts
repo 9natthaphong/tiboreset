@@ -1,0 +1,1 @@
+import{backtest}from"@/lib/forecasting";import{state}from"@/lib/demo-store";export async function POST(){return Response.json({ok:true,data:backtest({cutoff:"2026-07-11T12:00:00Z",horizonHours:36,evidence:state().evidence,resets:[{occurredAt:"2026-07-13T00:00:00Z"}]})})}

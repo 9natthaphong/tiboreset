@@ -1,0 +1,1 @@
+const buckets=new Map<string,{count:number;reset:number}>();export function rateLimit(key:string,limit=5,windowMs=3600000){const now=Date.now(),x=buckets.get(key);if(!x||x.reset<now){buckets.set(key,{count:1,reset:now+windowMs});return true}if(x.count>=limit)return false;x.count++;return true}

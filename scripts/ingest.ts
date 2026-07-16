@@ -1,0 +1,1 @@
+import{FixtureSourceAdapter}from"../src/lib/social/adapters";const source=new FixtureSourceAdapter();const account=await source.resolveAccount("thsottiaux");console.log({mode:"demo",account,batch:await source.fetchPosts({accountId:account.id})});

@@ -1,0 +1,2 @@
+-- Replace the placeholders after deployment. Store secrets in Vault rather than source control.
+-- select cron.schedule('reset-oracle-ingest','*/5 * * * *',$$ select net.http_post(url:='https://YOUR_DOMAIN/api/cron/ingest',headers:=jsonb_build_object('Authorization','Bearer ' || 'YOUR_CRON_SECRET','Content-Type','application/json'),body:='{}'::jsonb); $$);

@@ -1,0 +1,1 @@
+import type{NotificationCandidate,Subscription}from"./types";export const evaluateResetEvent=(s:Subscription,resetEventId:string):NotificationCandidate|undefined=>s.status==="active"&&s.notifyConfirmedReset?{type:"confirmed_reset",eventKey:`confirmed-reset:${resetEventId}`,subscriptionId:s.id,metadata:{resetEventId}}:undefined;

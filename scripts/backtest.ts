@@ -1,0 +1,1 @@
+import demo from"../src/data/demo.json";import{backtest,type Evidence}from"../src/lib/forecasting";console.log(backtest({cutoff:"2026-07-11T12:00:00Z",horizonHours:36,evidence:demo.evidence as Evidence[],resets:[{occurredAt:"2026-07-13T00:00:00Z"}]}));

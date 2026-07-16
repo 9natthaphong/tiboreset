@@ -1,0 +1,1 @@
+import{unsubscribe}from"@/lib/demo-store";import{NextResponse}from"next/server";export async function GET(req:Request){const t=new URL(req.url).searchParams.get("token");return NextResponse.redirect(new URL(t&&unsubscribe(t)?"/alerts/unsubscribed":"/alerts/invalid",req.url))}
