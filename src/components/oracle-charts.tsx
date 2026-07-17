@@ -7,15 +7,29 @@ import { ArrowRight, ChevronDown } from "lucide-react";
 import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Forecast } from "@/lib/forecasting";
 import type { HistoryPoint, ResetHistoryItem } from "@/lib/public-data-types";
+import { formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
 
-const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), { ssr: false, loading: () => <div className="diagnostics-loading" role="status">Loading full model record…</div> });
+const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), {
+  ssr: false,
+  loading: () => (
+    <div className="diagnostics-loading" role="status">
+      Loading full model record…
+    </div>
+  ),
+});
 
 type Range = "24H" | "7D" | "ALL";
 type ForecastView = "movement" | "signals" | "range";
 type TrendView = "live" | "resets";
 
-const chartTooltip = { background: "#101513", border: "1px solid #3e443f", color: "#f3eee2", fontFamily: "var(--font-mono)", fontSize: 11 };
-const dateLabel = (value: string) => new Date(value).toLocaleDateString("en", { month: "short", day: "numeric" });
+const chartTooltip = {
+  background: "#101513",
+  border: "1px solid #3e443f",
+  color: "#f3eee2",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+};
+const dateLabel = formatUtcShortDate;
 const contributionLabels: Record<string, string> = {
   explicit_reset_confirmation: "Confirmed reset language",
   explicit_reset_hint: "Direct reset language",
@@ -63,10 +77,14 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(true);
   const latestTime = Date.parse(history.at(-1)?.time ?? forecast.generatedAt);
-  const filtered = useMemo(() => history.filter(point => {
-    if (range === "ALL") return true;
-    return Date.parse(point.time) >= latestTime - (range === "24H" ? 86_400_000 : 7 * 86_400_000);
-  }), [history, latestTime, range]);
+  const filtered = useMemo(
+    () =>
+      history.filter((point) => {
+        if (range === "ALL") return true;
+        return Date.parse(point.time) >= latestTime - (range === "24H" ? 86_400_000 : 7 * 86_400_000);
+      }),
+    [history, latestTime, range],
+  );
   const historyData = filtered.map((point, index) => ({
     ...point,
     bandBase: point.low,
@@ -75,25 +93,31 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
     negativeMarker: (point.impact ?? 0) < 0 ? point.probability : null,
     verifiedMarker: point.verified ? point.probability : null,
     currentMarker: index === filtered.length - 1 ? point.probability : null,
-    before: history[Math.max(0, history.findIndex(item => item.forecastId === point.forecastId) - 1)]?.probability ?? point.probability,
+    before: history[Math.max(0, history.findIndex((item) => item.forecastId === point.forecastId) - 1)]?.probability ?? point.probability,
   }));
-  const positives = forecast.contributions.filter(item => item.logOddsContribution > 0).sort((a, b) => b.logOddsContribution - a.logOddsContribution).slice(0, 4);
-  const negatives = forecast.contributions.filter(item => item.logOddsContribution < 0).sort((a, b) => a.logOddsContribution - b.logOddsContribution).slice(0, 3);
-  const contribution = [...positives, ...negatives].map(item => ({
+  const positives = forecast.contributions
+    .filter((item) => item.logOddsContribution > 0)
+    .sort((a, b) => b.logOddsContribution - a.logOddsContribution)
+    .slice(0, 4);
+  const negatives = forecast.contributions
+    .filter((item) => item.logOddsContribution < 0)
+    .sort((a, b) => a.logOddsContribution - b.logOddsContribution)
+    .slice(0, 3);
+  const contribution = [...positives, ...negatives].map((item) => ({
     name: contributionLabels[item.featureName] ?? item.label,
     value: Number(item.logOddsContribution.toFixed(2)),
     technicalName: item.featureName,
     explanation: contributionExplanations[item.featureName] ?? "This factor changes the deterministic model estimate using its configured expert-prior coefficient.",
   }));
   const rankedContributions = [...forecast.contributions].sort((a, b) => Math.abs(b.logOddsContribution) - Math.abs(a.logOddsContribution)).slice(0, 7);
-  const maxContribution = Math.max(...contribution.map(item => Math.abs(item.value)), 0.01);
+  const maxContribution = Math.max(...contribution.map((item) => Math.abs(item.value)), 0.01);
   const first = history[0];
   const last = history.at(-1);
   const delta = first && last ? last.probability - first.probability : 0;
-  const trackingDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(first?.time ?? forecast.generatedAt));
-  const summary = history.length >= 2 && first && last
-    ? `Reset probability ${delta >= 0 ? "increased" : "decreased"} from ${first.probability}% to ${last.probability}%${last.label ? ` after ${last.label.toLowerCase()} evidence` : ""}.`
-    : `Live forecast tracking began on ${trackingDate}. More points will appear as new signals are processed.`;
+  const trackingDate = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+  }).format(new Date(first?.time ?? forecast.generatedAt));
+  const summary = history.length >= 2 && first && last ? `Reset probability ${delta >= 0 ? "increased" : "decreased"} from ${first.probability}% to ${last.probability}%${last.label ? ` after ${last.label.toLowerCase()} evidence` : ""}.` : `Live forecast tracking began on ${trackingDate}. More points will appear as new signals are processed.`;
 
   const selectView = (next: ForecastView) => setView(next);
   const onTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -110,106 +134,412 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-forecast-tab="${nextView}"]`)?.focus());
   };
 
-  return <div className="forecast-visuals">
-    <div className="forecast-view-tabs" role="tablist" aria-label="Forecast view">
-      {viewOrder.map(item => <button
-        key={item}
-        type="button"
-        role="tab"
-        id={`forecast-tab-${item}`}
-        aria-controls={`forecast-panel-${item}`}
-        aria-selected={view === item}
-        tabIndex={view === item ? 0 : -1}
-        className={view === item ? "active" : ""}
-        data-forecast-tab={item}
-        onClick={() => selectView(item)}
-        onKeyDown={onTabKeyDown}
-      ><span>{item.toUpperCase()}</span><ArrowRight size={15}/></button>)}
+  return (
+    <div className="forecast-visuals">
+      <div className="forecast-view-tabs" role="tablist" aria-label="Forecast view">
+        {viewOrder.map((item) => (
+          <button key={item} type="button" role="tab" id={`forecast-tab-${item}`} aria-controls={`forecast-panel-${item}`} aria-selected={view === item} tabIndex={view === item ? 0 : -1} className={view === item ? "active" : ""} data-forecast-tab={item} onClick={() => selectView(item)} onKeyDown={onTabKeyDown}>
+            <span>{item.toUpperCase()}</span>
+            <ArrowRight size={15} />
+          </button>
+        ))}
+      </div>
+
+      <div className="forecast-active-view">
+        {view === "movement" && (
+          <section id="forecast-panel-movement" role="tabpanel" aria-labelledby="forecast-tab-movement" className="forecast-view-panel movement-view" data-testid="probability-trend">
+            <header className="forecast-view-heading">
+              <div>
+                <span>{trendView === "live" ? "RESET PROBABILITY TREND" : "VERIFIED RESET CALENDAR"}</span>
+                <h3>{trendView === "live" ? "How the forecast is moving" : "Milestone announcements over time"}</h3>
+              </div>
+              <div className="trend-view-toggle" aria-label="Movement data source">
+                <button type="button" className={trendView === "live" ? "active" : ""} onClick={() => setTrendView("live")} aria-pressed={trendView === "live"}>
+                  LIVE FORECAST
+                </button>
+                <button type="button" className={trendView === "resets" ? "active" : ""} onClick={() => setTrendView("resets")} aria-pressed={trendView === "resets"}>
+                  RESET HISTORY
+                </button>
+              </div>
+            </header>
+            {trendView === "live" ? (
+              <>
+                {history.length < 2 ? (
+                  <div className="sparse-forecast-state" data-testid="sparse-forecast-state">
+                    <span>LIVE TRACKING HAS JUST STARTED</span>
+                    <strong>{Math.round(forecast.probability * 100)}%</strong>
+                    <h4>The first forecast was recorded on {trackingDate}.</h4>
+                    <p>New points will appear when fresh signals change the model.</p>
+                    <button type="button" onClick={() => setTrendView("resets")}>
+                      View reset history <ArrowRight size={16} />
+                    </button>
+                    <small>One actual forecast snapshot · no historical probabilities inferred</small>
+                  </div>
+                ) : (
+                  <>
+                    <div className="range-toggle trend-range-toggle" aria-label="Forecast history range">
+                      {(["24H", "7D", "ALL"] as Range[]).map((option) => (
+                        <button type="button" key={option} className={option === range ? "active" : ""} onClick={() => setRange(option)} aria-pressed={option === range}>
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="chart-scroll">
+                      <ResponsiveContainer width="100%" height={360}>
+                        <ComposedChart data={historyData} margin={{ top: 22, right: 22, left: 2, bottom: 8 }}>
+                          <defs>
+                            <linearGradient id="goldBand" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0" stopColor="#d9a441" stopOpacity=".24" />
+                              <stop offset="1" stopColor="#d9a441" stopOpacity=".025" />
+                            </linearGradient>
+                          </defs>
+                          <XAxis dataKey="time" tickFormatter={dateLabel} stroke="#717771" tickLine={false} axisLine={false} />
+                          <YAxis domain={[0, 100]} unit="%" stroke="#717771" tickLine={false} axisLine={false} width={42} />
+                          <Tooltip contentStyle={chartTooltip} labelFormatter={(value) => formatUtcTimestamp(String(value))} formatter={(value, name, item) => (name === "probability" ? [`${value}% · ${String(item.payload.label)}`, `Forecast (${item.payload.before}% → ${value}%)`] : [value, name])} />
+                          <Area dataKey="bandBase" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false} />
+                          <Area dataKey="bandRange" stackId="interval" stroke="none" fill="url(#goldBand)" animationDuration={800} />
+                          <Line
+                            dataKey="probability"
+                            stroke="#ffd36a"
+                            strokeWidth={3}
+                            dot={false}
+                            activeDot={{
+                              fill: "#ffd36a",
+                              r: 6,
+                              stroke: "#fff3c9",
+                              strokeWidth: 1,
+                            }}
+                            animationDuration={850}
+                          />
+                          <Line
+                            dataKey="relevantMarker"
+                            stroke="none"
+                            dot={{
+                              fill: "#4bd8ee",
+                              r: 5,
+                              stroke: "#101513",
+                              strokeWidth: 2,
+                            }}
+                          />
+                          <Line
+                            dataKey="negativeMarker"
+                            stroke="none"
+                            dot={{
+                              fill: "#ff835e",
+                              r: 5,
+                              stroke: "#101513",
+                              strokeWidth: 2,
+                            }}
+                          />
+                          <Line
+                            dataKey="verifiedMarker"
+                            stroke="none"
+                            dot={{
+                              fill: "#f3eee2",
+                              r: 6,
+                              stroke: "#ffd36a",
+                              strokeWidth: 2,
+                            }}
+                          />
+                          <Line
+                            dataKey="currentMarker"
+                            stroke="none"
+                            dot={{
+                              fill: "#ffd36a",
+                              r: 7,
+                              stroke: "#fff3c9",
+                              strokeWidth: 2,
+                            }}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="chart-legend" aria-hidden="true">
+                      <span>
+                        <i className="gold" />
+                        Probability
+                      </span>
+                      <span>
+                        <i className="cyan" />
+                        Tibo signal
+                      </span>
+                      <span>
+                        <i className="orange" />
+                        Negative signal
+                      </span>
+                    </div>
+                    <p className="chart-summary" aria-live="polite">
+                      {summary}
+                    </p>
+                    <div className="annotation-focus" aria-label="Evidence-linked forecast changes">
+                      {history
+                        .filter((point) => point.evidencePostId)
+                        .map((point, index) => {
+                          const before = history[Math.max(0, index - 1)]?.probability ?? point.probability;
+                          const change = point.probability - before;
+                          return (
+                            <button type="button" key={point.forecastId} onFocus={() => setFocused(point)} onMouseEnter={() => setFocused(point)} onMouseLeave={() => setFocused(null)} aria-label={`${point.label}. ${point.probability}% forecast, ${change >= 0 ? "plus" : "minus"} ${Math.abs(change)} points.`}>
+                              <i className={(point.impact ?? 0) < 0 ? "negative-dot" : "signal-dot"} />
+                              <span>{dateLabel(point.time)}</span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                    {focused && (
+                      <div className="annotation-card" role="status">
+                        <strong>{focused.excerpt ?? focused.label}</strong>
+                        <span>
+                          {formatUtcTimestamp(focused.time)} · {focused.eventType?.replaceAll("_", " ")}
+                        </span>
+                        <b>
+                          {focused.impact && focused.impact > 0 ? "+" : ""}
+                          {focused.impact ?? 0} pts
+                        </b>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              <ResetCalendar resetHistory={resetHistory} />
+            )}
+          </section>
+        )}
+
+        {view === "signals" && (
+          <section id="forecast-panel-signals" role="tabpanel" aria-labelledby="forecast-tab-signals" className="forecast-view-panel signals-view" data-testid="contribution-chart">
+            <header className="forecast-view-heading">
+              <div>
+                <span>WHAT MOVED THE FORECAST</span>
+                <h3>Signals ranked by impact</h3>
+              </div>
+              <p>Clear language first. Technical math stays one layer deeper.</p>
+            </header>
+            <div className="signal-ranking">
+              <div className="signal-rank-row baseline-signal">
+                <span>00</span>
+                <div>
+                  <b>Baseline prior</b>
+                  <small>Starting point before current evidence</small>
+                </div>
+                <em>Expert prior</em>
+              </div>
+              {contribution.map((item, index) => {
+                const magnitude = Math.abs(item.value);
+                const strength = magnitude >= 0.7 ? "Strong" : magnitude >= 0.3 ? "Moderate" : "Slight";
+                const selected = selectedSignal === item.technicalName;
+                return (
+                  <div className={`signal-rank-wrap ${item.value >= 0 ? "positive-factor" : "negative-factor"}`} key={item.technicalName}>
+                    <button type="button" className="signal-rank-row" aria-expanded={selected} onClick={() => setSelectedSignal(selected ? null : item.technicalName)}>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <div>
+                        <b>{item.name}</b>
+                        <small>
+                          {strength} {item.value >= 0 ? "positive" : "negative"}
+                        </small>
+                        <i>
+                          <u
+                            style={{
+                              width: `${(magnitude / maxContribution) * 100}%`,
+                            }}
+                          />
+                        </i>
+                      </div>
+                      <em>
+                        {item.value > 0 ? "+" : ""}
+                        {item.value}
+                      </em>
+                      <ChevronDown size={16} />
+                    </button>
+                    {selected && <p className="signal-explanation">{item.explanation}</p>}
+                  </div>
+                );
+              })}
+            </div>
+            <details className="calculation-drawer">
+              <summary>
+                <span>
+                  <b>VIEW CALCULATION</b>
+                  <small>Technical feature names, origins and configured values</small>
+                </span>
+                <ChevronDown size={17} />
+              </summary>
+              <div>
+                {forecast.contributions.map((item) => {
+                  const featureName = item.featureName as keyof typeof forecast.featureOrigins;
+                  return (
+                    <dl key={item.featureName}>
+                      <dt>
+                        {contributionLabels[item.featureName] ?? item.label}
+                        <small>{forecast.featureDetails[featureName]}</small>
+                      </dt>
+                      <dd>
+                        <code>{item.featureName}</code>
+                        <span className={`feature-origin origin-${forecast.featureOrigins[featureName]}`}>{forecast.featureOrigins[featureName]}</span>
+                        <span>value {item.normalizedValue.toFixed(2)}</span>
+                        <span>coefficient {item.coefficient.toFixed(2)} · expert prior</span>
+                        <b>{item.logOddsContribution.toFixed(3)}</b>
+                      </dd>
+                    </dl>
+                  );
+                })}
+              </div>
+            </details>
+          </section>
+        )}
+
+        {view === "range" && (
+          <section id="forecast-panel-range" role="tabpanel" aria-labelledby="forecast-tab-range" className="forecast-view-panel range-view" data-testid="forecast-range">
+            <header className="forecast-view-heading">
+              <div>
+                <span>FORECAST RANGE</span>
+                <h3>Uncertainty, without the statistical fog.</h3>
+              </div>
+              <p>{forecast.simulation.count.toLocaleString()} seeded simulations</p>
+            </header>
+            <div className="range-editorial-values">
+              <div>
+                <span>CURRENT ESTIMATE</span>
+                <strong data-testid="chart-probability">{Math.round(forecast.probability * 100)}%</strong>
+              </div>
+              <div>
+                <span>LIKELY RANGE</span>
+                <b>
+                  {Math.round(forecast.credibleIntervalLow * 100)}–{Math.round(forecast.credibleIntervalHigh * 100)}%
+                </b>
+              </div>
+            </div>
+            <div className="probability-range editorial-range" role="img" aria-label={`Likely probability range from ${Math.round(forecast.credibleIntervalLow * 100)} to ${Math.round(forecast.credibleIntervalHigh * 100)} percent, current estimate ${Math.round(forecast.probability * 100)} percent`}>
+              <i
+                style={{
+                  left: `${forecast.credibleIntervalLow * 100}%`,
+                  width: `${(forecast.credibleIntervalHigh - forecast.credibleIntervalLow) * 100}%`,
+                }}
+              />
+              <b style={{ left: `${forecast.probability * 100}%` }}>
+                <span>{Math.round(forecast.probability * 100)}%</span>
+              </b>
+              <small className="range-low" style={{ left: `${forecast.credibleIntervalLow * 100}%` }}>
+                {Math.round(forecast.credibleIntervalLow * 100)}%
+              </small>
+              <small className="range-high" style={{ left: `${forecast.credibleIntervalHigh * 100}%` }}>
+                {Math.round(forecast.credibleIntervalHigh * 100)}%
+              </small>
+            </div>
+            <p className="range-confidence-copy">In 80% of simulations, the result fell inside this range.</p>
+          </section>
+        )}
+      </div>
+
+      <details className="advanced-diagnostics" open={diagnosticsOpen} onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)} data-testid="advanced-diagnostics">
+        <summary
+          aria-expanded={diagnosticsOpen}
+          onClick={() => {
+            if (!diagnosticsOpen) track("expand_model_record");
+          }}
+        >
+          <span className="diagnostic-toggle-icon" aria-hidden="true">
+            <i>+</i>
+            <b>−</b>
+          </span>
+          <span>
+            <b className="diagnostic-open-copy">OPEN FULL MODEL RECORD</b>
+            <b className="diagnostic-close-copy">COLLAPSE MODEL RECORD</b>
+            <small>Model summary, feature ranking, coefficients and audit details</small>
+          </span>
+          <ChevronDown size={18} />
+        </summary>
+        {diagnosticsOpen && (
+          <div className="diagnostics-disclosure">
+            <section className="model-summary" aria-labelledby="model-summary-title">
+              <header>
+                <span>MODEL RECORD</span>
+                <h3 id="model-summary-title">Current forecast at a glance</h3>
+              </header>
+              <dl>
+                <div>
+                  <dt>Current probability</dt>
+                  <dd>{Math.round(forecast.probability * 100)}%</dd>
+                </div>
+                <div>
+                  <dt>Likely interval</dt>
+                  <dd>
+                    {Math.round(forecast.credibleIntervalLow * 100)}–{Math.round(forecast.credibleIntervalHigh * 100)}%
+                  </dd>
+                </div>
+                <div>
+                  <dt>Model version</dt>
+                  <dd>{forecast.modelVersion}</dd>
+                </div>
+                <div>
+                  <dt>Forecast horizon</dt>
+                  <dd>{forecast.horizonHours} hours</dd>
+                </div>
+                <div>
+                  <dt>Simulations</dt>
+                  <dd>{forecast.simulation.count.toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt>Data cutoff</dt>
+                  <dd>{formatUtcTimestamp(forecast.dataCutoff)}</dd>
+                </div>
+                <div>
+                  <dt>Evidence count</dt>
+                  <dd>{forecast.evidenceIds.length}</dd>
+                </div>
+              </dl>
+              <div className="model-summary-ranking">
+                <h4>Feature contribution ranking</h4>
+                <ol>
+                  {rankedContributions.map((item) => (
+                    <li key={item.featureName}>
+                      <span>{contributionLabels[item.featureName] ?? item.label}</span>
+                      <b className={item.logOddsContribution < 0 ? "negative" : "positive"}>
+                        {item.logOddsContribution > 0 ? "+" : ""}
+                        {item.logOddsContribution.toFixed(2)}
+                      </b>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </section>
+            <AdvancedDiagnostics forecast={forecast} />
+          </div>
+        )}
+      </details>
     </div>
-
-    <div className="forecast-active-view">
-      {view === "movement" && <section id="forecast-panel-movement" role="tabpanel" aria-labelledby="forecast-tab-movement" className="forecast-view-panel movement-view" data-testid="probability-trend">
-        <header className="forecast-view-heading"><div><span>{trendView === "live" ? "RESET PROBABILITY TREND" : "VERIFIED RESET CALENDAR"}</span><h3>{trendView === "live" ? "How the forecast is moving" : "Milestone announcements over time"}</h3></div><div className="trend-view-toggle" aria-label="Movement data source"><button type="button" className={trendView === "live" ? "active" : ""} onClick={() => setTrendView("live")} aria-pressed={trendView === "live"}>LIVE FORECAST</button><button type="button" className={trendView === "resets" ? "active" : ""} onClick={() => setTrendView("resets")} aria-pressed={trendView === "resets"}>RESET HISTORY</button></div></header>
-        {trendView === "live" ? <>
-          {history.length < 2 ? <div className="sparse-forecast-state" data-testid="sparse-forecast-state">
-            <span>LIVE TRACKING HAS JUST STARTED</span>
-            <strong>{Math.round(forecast.probability * 100)}%</strong>
-            <h4>The first forecast was recorded on {trackingDate}.</h4>
-            <p>New points will appear when fresh signals change the model.</p>
-            <button type="button" onClick={() => setTrendView("resets")}>View reset history <ArrowRight size={16}/></button>
-            <small>One actual forecast snapshot · no historical probabilities inferred</small>
-          </div> : <>
-            <div className="range-toggle trend-range-toggle" aria-label="Forecast history range">{(["24H", "7D", "ALL"] as Range[]).map(option => <button type="button" key={option} className={option === range ? "active" : ""} onClick={() => setRange(option)} aria-pressed={option === range}>{option}</button>)}</div>
-            <div className="chart-scroll"><ResponsiveContainer width="100%" height={360}><ComposedChart data={historyData} margin={{ top: 22, right: 22, left: 2, bottom: 8 }}>
-              <defs><linearGradient id="goldBand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d9a441" stopOpacity=".24"/><stop offset="1" stopColor="#d9a441" stopOpacity=".025"/></linearGradient></defs>
-              <XAxis dataKey="time" tickFormatter={dateLabel} stroke="#717771" tickLine={false} axisLine={false}/><YAxis domain={[0, 100]} unit="%" stroke="#717771" tickLine={false} axisLine={false} width={42}/>
-              <Tooltip contentStyle={chartTooltip} labelFormatter={value => new Date(String(value)).toLocaleString()} formatter={(value, name, item) => name === "probability" ? [`${value}% · ${String(item.payload.label)}`, `Forecast (${item.payload.before}% → ${value}%)`] : [value, name]}/>
-              <Area dataKey="bandBase" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false}/><Area dataKey="bandRange" stackId="interval" stroke="none" fill="url(#goldBand)" animationDuration={800}/>
-              <Line dataKey="probability" stroke="#ffd36a" strokeWidth={3} dot={false} activeDot={{ fill: "#ffd36a", r: 6, stroke: "#fff3c9", strokeWidth: 1 }} animationDuration={850}/>
-              <Line dataKey="relevantMarker" stroke="none" dot={{ fill: "#4bd8ee", r: 5, stroke: "#101513", strokeWidth: 2 }}/><Line dataKey="negativeMarker" stroke="none" dot={{ fill: "#ff835e", r: 5, stroke: "#101513", strokeWidth: 2 }}/><Line dataKey="verifiedMarker" stroke="none" dot={{ fill: "#f3eee2", r: 6, stroke: "#ffd36a", strokeWidth: 2 }}/><Line dataKey="currentMarker" stroke="none" dot={{ fill: "#ffd36a", r: 7, stroke: "#fff3c9", strokeWidth: 2 }}/>
-            </ComposedChart></ResponsiveContainer></div>
-            <div className="chart-legend" aria-hidden="true"><span><i className="gold"/>Probability</span><span><i className="cyan"/>Tibo signal</span><span><i className="orange"/>Negative signal</span></div>
-            <p className="chart-summary" aria-live="polite">{summary}</p>
-            <div className="annotation-focus" aria-label="Evidence-linked forecast changes">{history.filter(point => point.evidencePostId).map((point, index) => { const before = history[Math.max(0, index - 1)]?.probability ?? point.probability; const change = point.probability - before; return <button type="button" key={point.forecastId} onFocus={() => setFocused(point)} onMouseEnter={() => setFocused(point)} onMouseLeave={() => setFocused(null)} aria-label={`${point.label}. ${point.probability}% forecast, ${change >= 0 ? "plus" : "minus"} ${Math.abs(change)} points.`}><i className={(point.impact ?? 0) < 0 ? "negative-dot" : "signal-dot"}/><span>{dateLabel(point.time)}</span></button>; })}</div>
-            {focused && <div className="annotation-card" role="status"><strong>{focused.excerpt ?? focused.label}</strong><span>{new Date(focused.time).toLocaleString()} · {focused.eventType?.replaceAll("_", " ")}</span><b>{focused.impact && focused.impact > 0 ? "+" : ""}{focused.impact ?? 0} pts</b></div>}
-          </>}
-        </> : <ResetCalendar resetHistory={resetHistory}/>} 
-      </section>}
-
-      {view === "signals" && <section id="forecast-panel-signals" role="tabpanel" aria-labelledby="forecast-tab-signals" className="forecast-view-panel signals-view" data-testid="contribution-chart">
-        <header className="forecast-view-heading"><div><span>WHAT MOVED THE FORECAST</span><h3>Signals ranked by impact</h3></div><p>Clear language first. Technical math stays one layer deeper.</p></header>
-        <div className="signal-ranking"><div className="signal-rank-row baseline-signal"><span>00</span><div><b>Baseline prior</b><small>Starting point before current evidence</small></div><em>Expert prior</em></div>{contribution.map((item, index) => {
-          const magnitude = Math.abs(item.value);
-          const strength = magnitude >= 0.7 ? "Strong" : magnitude >= 0.3 ? "Moderate" : "Slight";
-          const selected = selectedSignal === item.technicalName;
-          return <div className={`signal-rank-wrap ${item.value >= 0 ? "positive-factor" : "negative-factor"}`} key={item.technicalName}>
-            <button type="button" className="signal-rank-row" aria-expanded={selected} onClick={() => setSelectedSignal(selected ? null : item.technicalName)}>
-              <span>{String(index + 1).padStart(2, "0")}</span><div><b>{item.name}</b><small>{strength} {item.value >= 0 ? "positive" : "negative"}</small><i><u style={{ width: `${magnitude / maxContribution * 100}%` }}/></i></div><em>{item.value > 0 ? "+" : ""}{item.value}</em><ChevronDown size={16}/>
-            </button>
-            {selected && <p className="signal-explanation">{item.explanation}</p>}
-          </div>;
-        })}</div>
-        <details className="calculation-drawer"><summary><span><b>VIEW CALCULATION</b><small>Technical feature names, origins and configured values</small></span><ChevronDown size={17}/></summary><div>{forecast.contributions.map(item => {
-          const featureName = item.featureName as keyof typeof forecast.featureOrigins;
-          return <dl key={item.featureName}><dt>{contributionLabels[item.featureName] ?? item.label}<small>{forecast.featureDetails[featureName]}</small></dt><dd><code>{item.featureName}</code><span className={`feature-origin origin-${forecast.featureOrigins[featureName]}`}>{forecast.featureOrigins[featureName]}</span><span>value {item.normalizedValue.toFixed(2)}</span><span>coefficient {item.coefficient.toFixed(2)} · expert prior</span><b>{item.logOddsContribution.toFixed(3)}</b></dd></dl>;
-        })}</div></details>
-      </section>}
-
-      {view === "range" && <section id="forecast-panel-range" role="tabpanel" aria-labelledby="forecast-tab-range" className="forecast-view-panel range-view" data-testid="forecast-range">
-        <header className="forecast-view-heading"><div><span>FORECAST RANGE</span><h3>Uncertainty, without the statistical fog.</h3></div><p>{forecast.simulation.count.toLocaleString()} seeded simulations</p></header>
-        <div className="range-editorial-values"><div><span>CURRENT ESTIMATE</span><strong data-testid="chart-probability">{Math.round(forecast.probability * 100)}%</strong></div><div><span>LIKELY RANGE</span><b>{Math.round(forecast.credibleIntervalLow * 100)}–{Math.round(forecast.credibleIntervalHigh * 100)}%</b></div></div>
-        <div className="probability-range editorial-range" role="img" aria-label={`Likely probability range from ${Math.round(forecast.credibleIntervalLow * 100)} to ${Math.round(forecast.credibleIntervalHigh * 100)} percent, current estimate ${Math.round(forecast.probability * 100)} percent`}>
-          <i style={{ left: `${forecast.credibleIntervalLow * 100}%`, width: `${(forecast.credibleIntervalHigh - forecast.credibleIntervalLow) * 100}%` }}/>
-          <b style={{ left: `${forecast.probability * 100}%` }}><span>{Math.round(forecast.probability * 100)}%</span></b>
-          <small className="range-low" style={{ left: `${forecast.credibleIntervalLow * 100}%` }}>{Math.round(forecast.credibleIntervalLow * 100)}%</small>
-          <small className="range-high" style={{ left: `${forecast.credibleIntervalHigh * 100}%` }}>{Math.round(forecast.credibleIntervalHigh * 100)}%</small>
-        </div>
-        <p className="range-confidence-copy">In 80% of simulations, the result fell inside this range.</p>
-      </section>}
-    </div>
-
-    <details className="advanced-diagnostics" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)} data-testid="advanced-diagnostics">
-      <summary aria-expanded={diagnosticsOpen} onClick={() => { if (!diagnosticsOpen) track("expand_model_record"); }}><span className="diagnostic-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="diagnostic-open-copy">OPEN FULL MODEL RECORD</b><b className="diagnostic-close-copy">COLLAPSE MODEL RECORD</b><small>Model summary, feature ranking, coefficients and audit details</small></span><ChevronDown size={18}/></summary>
-      {diagnosticsOpen && <div className="diagnostics-disclosure"><section className="model-summary" aria-labelledby="model-summary-title"><header><span>MODEL RECORD</span><h3 id="model-summary-title">Current forecast at a glance</h3></header><dl><div><dt>Current probability</dt><dd>{Math.round(forecast.probability * 100)}%</dd></div><div><dt>Likely interval</dt><dd>{Math.round(forecast.credibleIntervalLow * 100)}–{Math.round(forecast.credibleIntervalHigh * 100)}%</dd></div><div><dt>Model version</dt><dd>{forecast.modelVersion}</dd></div><div><dt>Forecast horizon</dt><dd>{forecast.horizonHours} hours</dd></div><div><dt>Simulations</dt><dd>{forecast.simulation.count.toLocaleString()}</dd></div><div><dt>Data cutoff</dt><dd>{new Date(forecast.dataCutoff).toLocaleString()}</dd></div><div><dt>Evidence count</dt><dd>{forecast.evidenceIds.length}</dd></div></dl><div className="model-summary-ranking"><h4>Feature contribution ranking</h4><ol>{rankedContributions.map(item => <li key={item.featureName}><span>{contributionLabels[item.featureName] ?? item.label}</span><b className={item.logOddsContribution < 0 ? "negative" : "positive"}>{item.logOddsContribution > 0 ? "+" : ""}{item.logOddsContribution.toFixed(2)}</b></li>)}</ol></div></section><AdvancedDiagnostics forecast={forecast}/></div>}
-    </details>
-  </div>;
+  );
 }
 
 function ResetCalendar({ resetHistory }: { resetHistory: ResetHistoryItem[] }) {
-  const records = resetHistory
-    .filter(item => item.milestoneUsers)
-    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const records = resetHistory.filter((item) => item.milestoneUsers).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
   if (!records.length) return <div className="reset-calendar-empty">No verified reset announcements are available.</div>;
   const start = Date.parse(records[0].date);
   const end = Date.parse(records.at(-1)!.date);
   const span = Math.max(1, end - start);
   const position = (date: string) => 4 + ((Date.parse(date) - start) / span) * 92;
-  return <div className="reset-calendar" data-testid="reset-history-calendar">
-    <div className="calendar-axis" role="img" aria-label={`Verified reset announcements from ${dateLabel(records[0].date)} to ${dateLabel(records.at(-1)!.date)}`}>
-      <span className="axis-start">{dateLabel(records[0].date)}</span><span className="axis-end">{dateLabel(records.at(-1)!.date)}</span>
-      {records.map(record => <span className="calendar-marker" key={record.id} style={{ left: `${position(record.date)}%` }} title={`${(record.milestoneUsers ?? 0) / 1_000_000}M · ${record.type} · ${dateLabel(record.date)}`} tabIndex={0} aria-label={`${(record.milestoneUsers ?? 0) / 1_000_000} million users, ${record.type} reset announcement, ${dateLabel(record.date)}`}><i/><b>{(record.milestoneUsers ?? 0) / 1_000_000}M</b></span>)}
+  return (
+    <div className="reset-calendar" data-testid="reset-history-calendar">
+      <div className="calendar-axis" role="img" aria-label={`Verified reset announcements from ${dateLabel(records[0].date)} to ${dateLabel(records.at(-1)!.date)}`}>
+        <span className="axis-start">{dateLabel(records[0].date)}</span>
+        <span className="axis-end">{dateLabel(records.at(-1)!.date)}</span>
+        {records.map((record) => (
+          <span className="calendar-marker" key={record.id} style={{ left: `${position(record.date)}%` }} title={`${(record.milestoneUsers ?? 0) / 1_000_000}M · ${record.type} · ${dateLabel(record.date)}`} tabIndex={0} aria-label={`${(record.milestoneUsers ?? 0) / 1_000_000} million users, ${record.type} reset announcement, ${dateLabel(record.date)}`}>
+            <i />
+            <b>{(record.milestoneUsers ?? 0) / 1_000_000}M</b>
+          </span>
+        ))}
+      </div>
+      <div className="calendar-record-grid">
+        {records.map((record) => (
+          <article key={record.id}>
+            <span>{record.displayDateThailand ?? record.date.slice(0, 10)}</span>
+            <strong>{(record.milestoneUsers ?? 0) / 1_000_000}M</strong>
+            <b>{record.type === "scheduled" ? "SCHEDULED" : record.type.toUpperCase()}</b>
+          </article>
+        ))}
+      </div>
+      <p>Verified announcement dates only. Reset types are categorical and are not plotted on the probability axis.</p>
     </div>
-    <div className="calendar-record-grid">{records.map(record => <article key={record.id}><span>{record.displayDateThailand ?? record.date.slice(0, 10)}</span><strong>{(record.milestoneUsers ?? 0) / 1_000_000}M</strong><b>{record.type === "scheduled" ? "SCHEDULED" : record.type.toUpperCase()}</b></article>)}</div>
-    <p>Verified announcement dates only. Reset types are categorical and are not plotted on the probability axis.</p>
-  </div>;
+  );
 }

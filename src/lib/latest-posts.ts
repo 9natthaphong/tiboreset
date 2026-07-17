@@ -16,6 +16,18 @@ export function sortAndDedupePosts(posts: LatestPost[], limit: number): LatestPo
     .slice(0, parseLatestPostsLimit(String(limit)));
 }
 
+export function mapPublicAccount(input: { username?: string | null; displayName?: string | null; profileImageUrl?: string | null }) {
+  let profileImageUrl: string | null = null;
+  if (input.profileImageUrl) {
+    try {
+      const url = new URL(input.profileImageUrl);
+      if (url.protocol === "https:" && url.hostname === "pbs.twimg.com") profileImageUrl = url.toString();
+    } catch { /* An invalid cached URL safely falls back to the neutral avatar. */ }
+  }
+  const cleanUsername = (input.username ?? "thsottiaux").replace(/^@/, "");
+  return { username: `@${cleanUsername}`, displayName: input.displayName?.trim() || cleanUsername, profileImageUrl };
+}
+
 export function createDemoLatestPosts(evidence: Evidence[], lastUpdatedAt: string, limit: number): LatestPostsResponse {
   const posts = evidence.map<LatestPost>(item => ({
     id: item.postId,
@@ -26,9 +38,11 @@ export function createDemoLatestPosts(evidence: Evidence[], lastUpdatedAt: strin
     eventType: item.eventType,
     extractionConfidence: item.confidence,
     forecastImpact: item.effect,
-    verified: item.verified,
-    ambiguous: !item.verified || item.confidence < .75,
+    verified: item.eventType !== "irrelevant" && item.verified,
+    ambiguous: item.eventType !== "irrelevant" && (!item.verified || item.confidence < .75),
+    needsReview: item.eventType !== "irrelevant" && (!item.verified || item.confidence < .75),
+    wasAnalyzed: true,
     metrics: { likes: 0, reposts: 0, replies: 0 },
   }));
-  return { mode: "demo", lastUpdatedAt, posts: sortAndDedupePosts(posts, limit) };
+  return { mode: "demo", lastUpdatedAt, account: mapPublicAccount({ username: "thsottiaux", displayName: "Tibo" }), posts: sortAndDedupePosts(posts, limit) };
 }

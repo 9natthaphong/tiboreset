@@ -4,6 +4,7 @@
 
 1. Create a Supabase project, enable `vector`, `pg_cron`, and `pg_net`, then apply every SQL file under `supabase/migrations` in order.
 2. Create an X developer app with read access. Set `X_BEARER_TOKEN` and `X_USERNAME`. The first successful run resolves the user ID once and reads at most the latest 10 posts. Every later run uses `latest_processed_post_id` as `since_id`. Do not use ingestion to backfill history.
+   Profile imagery uses the cached `monitored_accounts` record. Attached post media is intentionally not fetched to avoid additional Media Read usage; media-rich posts retain their **View original post** action.
 3. Set `OPENAI_API_KEY` and `OPENAI_MODEL=gpt-5.6`. Extraction uses the Responses API and the strict schema in `src/lib/extraction/schema.ts`; extraction never outputs probability.
 4. Set strong, independent `CRON_SECRET` and `ADMIN_SECRET` values. Replace the deployment placeholders in `003_pg_cron.sql` with the deployed HTTPS URL and a Vault-backed cron secret.
 5. Keep `CONTROL_ROOM_ENABLED=false` in Production unless an operator explicitly needs the hidden `/control-room` surface. Enabling the route does not bypass `ADMIN_SECRET` on mutating actions.

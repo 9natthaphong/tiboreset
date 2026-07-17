@@ -7,7 +7,7 @@ import demo from "@/data/demo.json";
 import { currentForecast, state } from "@/lib/demo-store";
 import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
 import { defaultFeatureOrigin, type Contribution, type Evidence, type EventType, type FeatureName, type FeatureOrigins, type Features, type Forecast, type SimulationSummary } from "@/lib/forecasting";
-import { createDemoLatestPosts, parseLatestPostsLimit } from "@/lib/latest-posts";
+import { createDemoLatestPosts, mapPublicAccount, parseLatestPostsLimit } from "@/lib/latest-posts";
 import { getEmailConfigurationStatus } from "@/lib/notifications/email-config";
 import { loadExternalContextEvents } from "@/lib/external-context";
 import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHistory } from "@/lib/historical-data";
@@ -27,6 +27,7 @@ const sourcePostSchema = z.object({
   id: z.string(), platform_post_id: z.string(), text: z.string(), post_url: z.string().nullable(), posted_at: z.string(),
   public_metrics: metricsSchema.nullish(), is_relevant: z.boolean().nullable(), ingested_at: z.string().nullable(),
 });
+const publicAccountSchema = z.object({ id: z.string(), username: z.string(), display_name: z.string().nullable(), profile_image_url: z.string().nullable() });
 const extractedEventSchema = z.object({
   id: z.string(), source_post_id: z.string(), event_type: eventTypeSchema, extraction_confidence: z.coerce.number().min(0).max(1).nullable(),
   requires_review: z.boolean().nullable(), event_payload: z.record(z.string(), z.unknown()), created_at: z.string(),
@@ -104,13 +105,14 @@ const seedMilestoneState = () => publicMilestoneState(buildMilestoneSeedRows());
 
 function demoHealth(): PublicHealth {
   const forecast = currentForecast();
-  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt };
+  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt, latestRun: null };
 }
 
 async function livePosts(client: SupabaseClient, limit: number): Promise<LatestPostsResponse> {
   const username = process.env.X_USERNAME ?? "thsottiaux";
-  const accountResult = await client.from("monitored_accounts").select("id").eq("platform", "x").eq("username", username).eq("enabled", true).maybeSingle();
+  const accountResult = await client.from("monitored_accounts").select("id,username,display_name,profile_image_url").eq("platform", "x").eq("username", username).eq("enabled", true).maybeSingle();
   if (accountResult.error || !accountResult.data) throw new Error("account unavailable");
+  const account = publicAccountSchema.parse(accountResult.data);
   const postResult = await client.from("source_posts").select("id,platform_post_id,text,post_url,posted_at,public_metrics,is_relevant,ingested_at").eq("monitored_account_id", accountResult.data.id).eq("approved_public", true).order("posted_at", { ascending: false }).limit(limit);
   if (postResult.error) throw new Error("posts unavailable");
   const rows = z.array(sourcePostSchema).parse(postResult.data ?? []);
@@ -122,7 +124,8 @@ async function livePosts(client: SupabaseClient, limit: number): Promise<LatestP
   for (const event of events) if (!newestEvent.has(event.source_post_id)) newestEvent.set(event.source_post_id, event);
   const posts = rows.map<LatestPost>(row => {
     const event = newestEvent.get(row.id);
-    const impact = event?.event_payload.forecastImpact ?? event?.event_payload.forecast_impact ?? 0;
+    const storedImpact = event?.event_payload.forecastImpact ?? event?.event_payload.forecast_impact ?? 0;
+    const impact = event?.requires_review === true || event?.event_type === "irrelevant" ? 0 : storedImpact;
     return {
       id: row.platform_post_id,
       text: row.text,
@@ -132,12 +135,14 @@ async function livePosts(client: SupabaseClient, limit: number): Promise<LatestP
       eventType: event?.event_type ?? "irrelevant",
       extractionConfidence: event?.extraction_confidence ?? 0,
       forecastImpact: typeof impact === "number" ? Math.round(impact) : 0,
-      verified: event ? event.requires_review === false : false,
-      ambiguous: event ? event.requires_review !== false : true,
+      verified: event ? event.requires_review === false && event.event_type !== "irrelevant" : false,
+      ambiguous: event?.requires_review === true,
+      needsReview: event?.requires_review === true,
+      wasAnalyzed: Boolean(event),
       metrics: { likes: row.public_metrics?.like_count ?? 0, reposts: row.public_metrics?.retweet_count ?? 0, replies: row.public_metrics?.reply_count ?? 0 },
     };
   });
-  return { mode: "live", lastUpdatedAt: rows[0]?.ingested_at ?? rows[0]?.posted_at ?? new Date(0).toISOString(), posts };
+  return { mode: "live", lastUpdatedAt: rows[0]?.ingested_at ?? rows[0]?.posted_at ?? new Date(0).toISOString(), account: mapPublicAccount({ username: account.username, displayName: account.display_name, profileImageUrl: account.profile_image_url }), posts };
 }
 
 export async function getLatestPosts(limit = 6): Promise<LatestPostsResponse> {
@@ -256,11 +261,13 @@ export async function getPublicHealth(): Promise<PublicHealth> {
   try {
     const [forecastResult, ingestionResult] = await Promise.all([
       client.from("forecasts").select("generated_at").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
-      client.from("ingestion_runs").select("completed_at").eq("status", "success").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
+      client.from("ingestion_runs").select("completed_at,posts_read,posts_inserted,posts_analyzed,metadata").eq("status", "success").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (forecastResult.error || ingestionResult.error) throw new Error("health unavailable");
-    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: ingestionResult.data?.completed_at ?? null, lastForecastAt: forecastResult.data?.generated_at ?? null };
-  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: null, lastForecastAt: null }; }
+    const run = ingestionResult.data;
+    const metadata = run?.metadata && typeof run.metadata === "object" ? run.metadata as Record<string, unknown> : {};
+    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: run?.completed_at ?? null, lastForecastAt: forecastResult.data?.generated_at ?? null, latestRun: run ? { postsRead: Number(run.posts_read ?? 0), newPostsScreened: Number(run.posts_inserted ?? 0), relevantPostsAnalyzed: Number(run.posts_analyzed ?? 0), forecastChanged: metadata.forecastChanged === true } : null };
+  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: null, lastForecastAt: null, latestRun: null }; }
 }
 
 export async function getPublicSnapshot(): Promise<PublicSnapshot> {

@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localExtract } from "@/lib/extraction/local";
 import type { Extraction } from "@/lib/extraction/schema";
 import { isAuthorizedCron } from "@/lib/ingestion/auth";
-import { MAX_X_POSTS_PER_RUN, runIngestion, type ExtractionResult, type IngestionReport, type IngestionRepository, type StoredAccount, type StoredExtraction, type StoredPost } from "@/lib/ingestion";
+import { deterministicForecastImpact, MAX_X_POSTS_PER_RUN, runIngestion, type ExtractionResult, type IngestionReport, type IngestionRepository, type StoredAccount, type StoredExtraction, type StoredPost } from "@/lib/ingestion";
 import type { Evidence, Forecast } from "@/lib/forecasting";
 import type { SocialAccount, SocialPost, SocialSourceAdapter } from "@/lib/social/adapters";
 
 class MemoryRepository implements IngestionRepository {
   account: StoredAccount | null = null;
   posts = new Map<string, { stored: StoredPost; post: SocialPost; screen: Extraction }>();
-  extractions: Array<{ post: StoredPost; result: ExtractionResult }> = [];
+  extractions: Array<{ post: StoredPost; result: ExtractionResult; forecastImpact: number }> = [];
   forecasts: Forecast[] = [];
   completed: IngestionReport[] = [];
   failures: string[] = [];
@@ -20,8 +20,8 @@ class MemoryRepository implements IngestionRepository {
   async upsertAccount(account: SocialAccount) { this.account = { ...account, databaseId: "00000000-0000-4000-8000-000000000001" }; return this.account; }
   async findExistingPostIds(ids: string[]) { return new Set(ids.filter(id => this.posts.has(id))); }
   async insertPost(input: { account: StoredAccount; post: SocialPost; localScreen: Extraction }) { const stored = { databaseId: `db-${input.post.id}`, platformPostId: input.post.id }; this.posts.set(input.post.id, { stored, post: input.post, screen: input.localScreen }); return stored; }
-  async insertExtraction(input: { post: StoredPost; result: ExtractionResult }): Promise<StoredExtraction> { this.extractions.push(input); return { databaseId: `event-${input.post.platformPostId}` }; }
-  async loadForecastEvidence(): Promise<Evidence[]> { return this.extractions.filter(item => item.result.extraction.is_relevant).map(item => ({ id: `event-${item.post.platformPostId}`, postId: item.post.databaseId, postedAt: this.posts.get(item.post.platformPostId)!.post.createdAt, excerpt: this.posts.get(item.post.platformPostId)!.post.text, eventType: item.result.extraction.event_type, confidence: item.result.extraction.extraction_confidence, verified: false, url: "https://x.com/i/status/test", effect: 8 })); }
+  async insertExtraction(input: { post: StoredPost; result: ExtractionResult; forecastImpact: number }): Promise<StoredExtraction> { this.extractions.push(input); return { databaseId: `event-${input.post.platformPostId}` }; }
+  async loadForecastEvidence(): Promise<Evidence[]> { return this.extractions.filter(item => item.result.extraction.is_relevant && !item.result.extraction.requires_review).map(item => ({ id: `event-${item.post.platformPostId}`, postId: item.post.databaseId, postedAt: this.posts.get(item.post.platformPostId)!.post.createdAt, excerpt: this.posts.get(item.post.platformPostId)!.post.text, eventType: item.result.extraction.event_type, confidence: item.result.extraction.extraction_confidence, verified: true, url: "https://x.com/i/status/test", effect: item.forecastImpact })); }
   async saveForecast(forecast: Forecast) { this.forecasts.push(forecast); return `forecast-${this.forecasts.length}`; }
   async updateLatestProcessedPostId(_accountId: string, platformPostId: string) { if (this.account) this.account.latestProcessedPostId = platformPostId; }
 }
@@ -97,7 +97,41 @@ describe("bounded live ingestion", () => {
     await runIngestion({ repository, source: new MemorySource([post("140", "ordinary lunch update")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
     expect(repository.forecasts).toHaveLength(0);
     repository.account!.latestProcessedPostId = "140";
-    await runIngestion({ repository, source: new MemorySource([post("141", "reset soon")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
+    await runIngestion({ repository, source: new MemorySource([post("141", "We will reset usage limits tomorrow")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
     expect(repository.forecasts).toHaveLength(1);
+  });
+
+  it("stores ambiguous reset language for review without changing the forecast", async () => {
+    const report = await runIngestion({ repository, source: new MemorySource([post("142", "I actually stole their reset button. Youre welcome Codex.")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
+    expect(repository.extractions[0].result.extraction.requires_review).toBe(true);
+    expect(repository.extractions[0].forecastImpact).toBe(0);
+    expect(report.forecastChanged).toBe(false);
+    expect(repository.forecasts).toHaveLength(0);
+  });
+});
+
+describe("reset wording safety", () => {
+  it.each([
+    "I actually stole their reset button. Youre welcome Codex.",
+    "Will you reset the limits?",
+    "Maybe another reset soon",
+  ])("keeps ambiguous wording as context only: %s", text => {
+    const extraction = localExtract(text);
+    expect(extraction.requires_review).toBe(true);
+    expect(deterministicForecastImpact(extraction)).toBe(0);
+  });
+
+  it("allows a credible operational commitment", () => {
+    const extraction = localExtract("We will reset usage limits tomorrow");
+    expect(extraction.event_type).toBe("reset_hint");
+    expect(extraction.requires_review).toBe(false);
+    expect(deterministicForecastImpact(extraction)).toBe(8);
+  });
+
+  it("preserves an explicit confirmed reset impact", () => {
+    const extraction = localExtract("Usage limits have been reset.");
+    expect(extraction.event_type).toBe("explicit_reset_confirmation");
+    expect(extraction.reset_confirmed).toBe(true);
+    expect(deterministicForecastImpact(extraction)).toBe(35);
   });
 });

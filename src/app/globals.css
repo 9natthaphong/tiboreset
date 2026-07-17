@@ -312,6 +312,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible,select:focus-visible,
 .advanced-diagnostics>summary>span:nth-child(2)>b,.research-archive>summary>span:nth-child(2)>b{font-size:12px;letter-spacing:.09em}
 .advanced-diagnostics>summary small,.research-archive>summary small{font-size:14px;color:var(--text-secondary)}
 .source-status b{font-size:11px;letter-spacing:.09em}.source-status small{font-size:12px;color:var(--text-secondary)}
+.signal-account-avatar{width:48px;height:48px;flex:0 0 48px;border-radius:50%;object-fit:cover;border:1px solid #4bd8ee55}.signal-account-avatar.fallback{display:grid;place-items:center;background:#151a17;color:var(--text-primary);font:600 18px var(--font-sans)}
+.ingestion-forecast-status{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;margin:28px 0;background:#29322d;border-block:1px solid #29322d}.ingestion-forecast-status>span{display:flex;flex-direction:column;gap:7px;padding:16px 18px;background:var(--background)}.ingestion-forecast-status small{font:11px var(--font-mono);color:var(--text-secondary);text-transform:uppercase;letter-spacing:.04em}.ingestion-forecast-status b{font:500 14px var(--font-sans);color:var(--text-primary)}.ingestion-forecast-status>p{grid-column:1/-1;margin:0;padding:13px 18px;background:#151a17;color:var(--text-secondary);font-size:14px}
+.signal-meta .screened{color:var(--text-secondary)}
+@media(max-width:900px){.ingestion-forecast-status{grid-template-columns:1fr 1fr}.ingestion-forecast-status>span:nth-of-type(1),.ingestion-forecast-status>span:nth-of-type(2){grid-column:span 2}}
 .signal-card>header{font-size:12px;color:var(--text-secondary)}
 .expand-post{font-size:13px}.signal-impact span,.signal-classification span,.signal-meta span,.signal-card footer{font-size:12px;color:var(--text-secondary)}
 .source-action,.view-all-signals{font-size:13px}

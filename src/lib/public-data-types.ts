@@ -14,12 +14,15 @@ export type LatestPost = {
   forecastImpact: number;
   verified: boolean;
   ambiguous: boolean;
+  needsReview: boolean;
+  wasAnalyzed: boolean;
   metrics: { likes: number; reposts: number; replies: number };
 };
 
 export type LatestPostsResponse = {
   mode: PublicMode;
   lastUpdatedAt: string;
+  account: { username: string; displayName: string; profileImageUrl: string | null };
   posts: LatestPost[];
 };
 
@@ -90,6 +93,7 @@ export type PublicHealth = {
   email: "disabled" | "configured" | "configuration_error";
   lastIngestionAt: string | null;
   lastForecastAt: string | null;
+  latestRun: { postsRead: number; newPostsScreened: number; relevantPostsAnalyzed: number; forecastChanged: boolean } | null;
 };
 
 export type PublicSnapshot = {

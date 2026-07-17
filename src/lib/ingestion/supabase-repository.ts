@@ -198,7 +198,7 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
     throwOnError(postResult.error, "Unable to load forecast source posts");
     const posts = z.array(postRowSchema).parse(postResult.data ?? []);
     if (!posts.length) return [];
-    const eventResult = await this.client.from("extracted_events").select("id,source_post_id,event_type,event_payload,extraction_confidence,requires_review").in("source_post_id", posts.map(post => post.id)).order("created_at", { ascending: false });
+    const eventResult = await this.client.from("extracted_events").select("id,source_post_id,event_type,event_payload,extraction_confidence,requires_review").in("source_post_id", posts.map(post => post.id)).eq("requires_review", false).order("created_at", { ascending: false });
     throwOnError(eventResult.error, "Unable to load forecast events");
     const events = z.array(eventRowSchema).parse(eventResult.data ?? []);
     const byPost = new Map<string, z.infer<typeof eventRowSchema>>();

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { motion } from "motion/react";
 import { track } from "@vercel/analytics";
@@ -15,13 +16,14 @@ import type { HistoricalDatasetSummary, HistoryPoint, LatestPost, LatestPostsRes
 import { getUsageGuidance } from "@/lib/usage-guidance";
 import { CinematicHero } from "./cinematic-hero";
 import { deriveMilestoneState } from "@/lib/milestones";
+import { formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
 
 const Charts = dynamic(() => import("./oracle-charts"), { ssr: false, loading: () => <div className="chart-loading">Loading forecast record…</div> });
 type Analog = { date: string; eventType: string; similarity: number; outcome: string; source: string; followed: boolean | null; forecastBefore?: number };
 type Props = { initialForecast: Forecast; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; milestoneState: PublicMilestoneState; historicalDataset: HistoricalDatasetSummary; externalContextEvents: ExternalContextEvent[]; health: PublicHealth; analogs: Analog[]; renderedAt: string; emailAlertsConfigured: boolean; evidenceExtractionModel: string | null };
 
-const formatTimestamp = (value: string) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value));
-const formatDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(value));
+const formatTimestamp = formatUtcTimestamp;
+const formatDate = formatUtcShortDate;
 const relativeTime = (value: string, now: string) => {
   const minutes = Math.max(0, Math.round((Date.parse(now) - Date.parse(value)) / 60000));
   if (minutes < 1) return "just now";
@@ -30,7 +32,7 @@ const relativeTime = (value: string, now: string) => {
   if (hours < 24) return `${hours} hr ago`;
   return `${Math.floor(hours / 24)}d ago`;
 };
-const impactLabel = (impact: number) => impact > 0 ? `+${impact} pts` : impact < 0 ? `${impact} pts` : "No impact";
+const impactLabel = (impact: number) => impact > 0 ? `+${impact} pts` : impact < 0 ? `${impact} pts` : "No forecast impact";
 const historyFromForecasts = (forecasts: Forecast[], evidence: Evidence[]): HistoryPoint[] => forecasts.map((forecast, index) => {
   const previous = forecasts[index - 1];
   const newPostId = forecast.sourcePostIds.find(id => !previous?.sourcePostIds.includes(id));
@@ -209,7 +211,7 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
 
     <section id="forecast" className="section forecast-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label gold-label">THE FORECAST</p><h2>One answer. Three clear views.</h2></div><p>What changed, how certain it is, and what the model sees now.</p></header><div data-reveal-primary><Charts forecast={forecast} history={history} resetHistory={resetHistory}/></div></section>
 
-    <section id="latest-signals" className="section latest-signals-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label cyan-label">LATEST SIGNALS FROM TIBO</p><h2>The posts moving the forecast.</h2></div><div className="source-status"><Radio size={14}/><span><b>{posts.mode === "live" ? "LIVE SOURCE" : "DEMO SOURCE"}</b><small>{posts.mode === "live" ? `Last checked ${relativeTime(posts.lastUpdatedAt, referenceTime)}` : "Synthetic fixtures for offline demonstration"}</small></span></div></header><p className="section-deck" data-reveal-primary>The newest public posts that may affect the reset forecast.</p><div className={`latest-signals-grid ${showAllPosts ? "show-all" : "compact"}`} data-reveal-support>{posts.posts.map(post => <LatestPostCard key={post.id} post={post} mode={posts.mode} expanded={expandedPosts.has(post.id)} onToggle={() => setExpandedPosts(current => { const next = new Set(current); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} now={referenceTime}/>)}</div>{posts.posts.length > 4 && <button className="view-all-signals" onClick={() => setShowAllPosts(value => !value)}>{showAllPosts ? "Show fewer signals" : "View all latest signals"} <ChevronDown size={16}/></button>}</section>
+    <section id="latest-signals" className="section latest-signals-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label cyan-label">LATEST SIGNALS FROM TIBO</p><h2>The posts moving the forecast.</h2></div><div className="source-status">{posts.account.profileImageUrl ? <Image className="signal-account-avatar" src={posts.account.profileImageUrl} alt={`${posts.account.displayName} profile`} width={48} height={48}/> : <span className="signal-account-avatar fallback" role="img" aria-label={`${posts.account.displayName} profile placeholder`}>T</span>}<Radio size={14}/><span><b>{posts.mode === "live" ? "LIVE SOURCE" : "DEMO SOURCE"}</b><small>{posts.mode === "live" ? `${posts.account.username} · checked ${relativeTime(posts.lastUpdatedAt, referenceTime)}` : "Synthetic fixtures for offline demonstration"}</small></span></div></header><p className="section-deck" data-reveal-primary>The newest public posts that may affect the reset forecast.</p>{health.latestRun && <div className="ingestion-forecast-status" aria-label="Latest ingestion and forecast status"><span><small>Last X check</small><b>{health.lastIngestionAt ? formatTimestamp(health.lastIngestionAt) : "Not yet checked"}</b></span><span><small>Forecast last changed</small><b>{health.lastForecastAt ? formatTimestamp(health.lastForecastAt) : "No forecast yet"}</b></span><span><small>New posts screened</small><b>{health.latestRun.newPostsScreened}</b></span><span><small>Relevant posts analyzed</small><b>{health.latestRun.relevantPostsAnalyzed}</b></span><span><small>Forecast changed</small><b>{health.latestRun.forecastChanged ? "Yes" : "No"}</b></span>{!health.latestRun.forecastChanged && health.latestRun.newPostsScreened > 0 && <p>Fresh posts were screened, but none changed the forecast.</p>}</div>}<div className={`latest-signals-grid ${showAllPosts ? "show-all" : "compact"}`} data-reveal-support>{posts.posts.map(post => <LatestPostCard key={post.id} post={post} mode={posts.mode} expanded={expandedPosts.has(post.id)} onToggle={() => setExpandedPosts(current => { const next = new Set(current); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} now={referenceTime}/>)}</div>{posts.posts.length > 4 && <button className="view-all-signals" onClick={() => setShowAllPosts(value => !value)}>{showAllPosts ? "Show fewer signals" : "View all latest signals"} <ChevronDown size={16}/></button>}</section>
 
     <MarketPressure events={externalContextEvents}/>
 
@@ -265,11 +267,13 @@ function ResetHistory({ resetHistory, milestoneState, historicalDataset, mode }:
 }
 
 function LatestPostCard({ post, mode, expanded, onToggle, now }: { post: LatestPost; mode: "demo" | "live"; expanded: boolean; onToggle: () => void; now: string }) {
+  const classification = post.needsReview ? "Context only" : post.isRelevant ? post.eventType.replaceAll("_", " ") : "Screened as unrelated";
+  const status = post.needsReview ? "Needs review" : post.verified ? "Verified" : post.isRelevant ? "Unverified" : "Screened";
   return <article className={`signal-card impact-${post.forecastImpact > 0 ? "positive" : post.forecastImpact < 0 ? "negative" : "neutral"}`} data-testid="latest-post-card">
     <header><span>{mode === "demo" ? "DEMO POST" : "@thsottiaux"}</span><time>{relativeTime(post.postedAt, now)}</time></header>
     <div className="signal-card-body"><p className={expanded ? "expanded" : ""}>{post.text}</p><button type="button" className="expand-post" aria-expanded={expanded} onClick={onToggle}>{expanded ? "Show less" : "Read full post"} <ChevronDown size={14}/></button></div>
-    <div className="signal-card-result"><div className="signal-impact"><b>{impactLabel(post.forecastImpact)}</b><span>{post.forecastImpact === 0 ? "Forecast unchanged" : "Forecast impact"}</span></div><div className="signal-classification"><b>{post.eventType.replaceAll("_", " ")}</b><span>{post.isRelevant ? "Relevant signal" : "Ordinary post"}</span></div></div>
-    <div className="signal-meta"><span>{Math.round(post.extractionConfidence * 100)}% extraction confidence</span><span className={post.verified ? "verified" : "ambiguous"}>{post.verified ? "Verified" : post.ambiguous ? "Ambiguity review" : "Unverified"}</span></div>
+    <div className="signal-card-result"><div className="signal-impact"><b>{impactLabel(post.forecastImpact)}</b><span>{post.forecastImpact === 0 ? "Forecast unchanged" : "Forecast impact"}</span></div><div className="signal-classification"><b>{classification}</b><span>{post.needsReview ? "Not used until reviewed" : post.isRelevant ? "Relevant signal" : "Local relevance screen"}</span></div></div>
+    <div className="signal-meta"><span>{post.wasAnalyzed ? `${Math.round(post.extractionConfidence * 100)}% extraction confidence` : "Local screen only"}</span><span className={post.verified ? "verified" : post.needsReview ? "ambiguous" : "screened"}>{status}</span></div>
     <footer><span>{mode === "demo" ? "Synthetic fixture" : "Official X source"}</span><a className="source-action" href={post.url} target="_blank" rel="noreferrer" onClick={() => track("view_official_source")}>{mode === "demo" ? "Open demo evidence" : "View original post"} <ExternalLink size={13}/></a></footer>
   </article>;
 }
@@ -303,7 +307,7 @@ function HowForecastIsCalculated({ forecast, evidenceExtractionModel }: { foreca
     <ol className="forecast-pipeline" aria-label="Forecast calculation pipeline" data-reveal-support>{pipeline.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span><b>{step}</b>{index < pipeline.length - 1 && <i aria-hidden="true">→</i>}</li>)}</ol>
     <div className="feature-origin-groups" data-reveal-support>{categories.map(category => <article key={category.origin}><h3>{category.origin}</h3><ul>{category.items.map(item => <li key={item}>{item}</li>)}</ul></article>)}</div>
     <div className="technology-record" data-reveal-support aria-label="Technology record"><span>OpenAI API · structured evidence extraction</span><span>X API · monitored public signals</span><span>Supabase · verified records and forecast history</span><span>Reset Oracle · deterministic probability engine</span><span>Vercel · production delivery and anonymous analytics</span></div>
-    <footer className="model-explainer-record" data-reveal-support><span>MODEL {forecast.modelVersion}</span><span>DATA CUTOFF {formatTimestamp(forecast.dataCutoff)} UTC</span><p>Every forecast exposes its evidence, feature origins, coefficients, uncertainty and audit record.</p><Link href="/lab/data" onClick={() => track("open_data_lab")}>Inspect the full technical record <span aria-hidden="true">→</span></Link></footer>
+    <footer className="model-explainer-record" data-reveal-support><span>MODEL {forecast.modelVersion}</span><span>DATA CUTOFF {formatTimestamp(forecast.dataCutoff)}</span><p>Every forecast exposes its evidence, feature origins, coefficients, uncertainty and audit record.</p><Link href="/lab/data" onClick={() => track("open_data_lab")}>Inspect the full technical record <span aria-hidden="true">→</span></Link></footer>
   </section>;
 }
 

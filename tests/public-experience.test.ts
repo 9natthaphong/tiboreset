@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Evidence } from "@/lib/forecasting";
-import { createDemoLatestPosts, parseLatestPostsLimit, sortAndDedupePosts } from "@/lib/latest-posts";
+import { createDemoLatestPosts, mapPublicAccount, parseLatestPostsLimit, sortAndDedupePosts } from "@/lib/latest-posts";
 import { getUsageGuidance } from "@/lib/usage-guidance";
 
 const evidence: Evidence[] = [
@@ -27,6 +27,11 @@ describe("latest public posts", () => {
   it("applies a requested limit after deduplication", () => {
     const posts = createDemoLatestPosts(evidence, "2026-07-16T12:00:00Z", 6).posts;
     expect(sortAndDedupePosts(posts, 1)).toHaveLength(1);
+  });
+
+  it("maps only the cached safe X profile image hostname", () => {
+    expect(mapPublicAccount({ username: "thsottiaux", displayName: "Tibo", profileImageUrl: "https://pbs.twimg.com/profile_images/example_normal.jpg" })).toEqual({ username: "@thsottiaux", displayName: "Tibo", profileImageUrl: "https://pbs.twimg.com/profile_images/example_normal.jpg" });
+    expect(mapPublicAccount({ username: "thsottiaux", profileImageUrl: "https://example.com/avatar.jpg" }).profileImageUrl).toBeNull();
   });
 });
 

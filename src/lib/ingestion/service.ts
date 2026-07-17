@@ -3,6 +3,7 @@ import { forecastFromEvidence } from "@/lib/forecasting";
 import type { SocialPost, SocialSourceAdapter } from "@/lib/social/adapters";
 import type { ExtractionResult, IngestionReport, IngestionRepository } from "./types";
 import { createMilestoneCandidate } from "@/lib/milestones";
+import { enforceExtractionSafety } from "@/lib/extraction/safety";
 
 const MAX_X_POSTS_PER_RUN = 10;
 
@@ -12,6 +13,7 @@ function newestPostId(posts: SocialPost[], reported?: string): string | undefine
 }
 
 export function deterministicForecastImpact(extraction: Extraction): number {
+  if (!extraction.is_relevant || extraction.requires_review) return 0;
   const impacts: Record<Extraction["event_type"], number> = {
     explicit_reset_confirmation: 35,
     reset_hint: 8,
@@ -73,9 +75,11 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
       const storedPost = await dependencies.repository.insertPost({ account, post, localScreen });
       postsInserted += 1;
       if (!localScreen.is_relevant) continue;
-      const result = await dependencies.extractRelevant(post.text, localScreen);
+      const extracted = await dependencies.extractRelevant(post.text, localScreen);
+      const result = { ...extracted, extraction: enforceExtractionSafety(post.text, extracted.extraction) };
       postsAnalyzed += 1;
-      await dependencies.repository.insertExtraction({ post: storedPost, result, forecastImpact: deterministicForecastImpact(result.extraction) });
+      const forecastImpact = deterministicForecastImpact(result.extraction);
+      await dependencies.repository.insertExtraction({ post: storedPost, result, forecastImpact });
       const latestVerifiedUsers = await dependencies.repository.getLatestVerifiedMilestoneUsers?.();
       const candidate = createMilestoneCandidate({
         text: post.text,
@@ -86,7 +90,7 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
         latestVerifiedUsers,
       });
       if (candidate) await dependencies.repository.upsertMilestoneCandidate?.({ candidate, post: storedPost });
-      if (result.extraction.is_relevant) relevantEvidenceChanged = true;
+      if (forecastImpact !== 0 && result.extraction.is_relevant && !result.extraction.requires_review) relevantEvidenceChanged = true;
     }
     let forecastId: string | null = null;
     if (relevantEvidenceChanged) {
