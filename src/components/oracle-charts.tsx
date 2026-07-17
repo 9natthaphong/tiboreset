@@ -195,7 +195,7 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
 
 function ResetCalendar({ resetHistory }: { resetHistory: ResetHistoryItem[] }) {
   const records = resetHistory
-    .filter(item => item.milestoneUsers && item.milestoneUsers >= 3_000_000 && item.milestoneUsers <= 9_000_000)
+    .filter(item => item.milestoneUsers)
     .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
   if (!records.length) return <div className="reset-calendar-empty">No verified reset announcements are available.</div>;
   const start = Date.parse(records[0].date);

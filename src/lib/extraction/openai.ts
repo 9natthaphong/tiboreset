@@ -3,7 +3,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { ExtractionSchema, type Extraction } from "./schema";
 import type { ExtractionResult } from "@/lib/ingestion";
 
-export const EXTRACTION_VERSION = "reset-extraction-1.0.0";
+export const EXTRACTION_VERSION = "reset-extraction-1.1.0";
 
 const systemPrompt = `You extract structured evidence from one public social post for RESET ORACLE.
 Never estimate or output a forecast probability.
@@ -11,6 +11,8 @@ Treat playful language as uncertain unless there is a clear commitment.
 A question or poll is not a confirmed reset.
 Distinguish historical statements from future intent.
 Do not infer a milestone unless the text explicitly supports it.
+Extract whether the user count is Codex-only, Codex plus ChatGPT Work, or unknown.
+Distinguish a completed full reset, a banked reset, a scheduled reset, and a milestone announcement with no reset.
 Use only minimal verbatim evidence excerpts and mark ambiguous posts for review.`;
 
 export async function extractWithOpenAI(text: string, client?: OpenAI): Promise<Extraction> {

@@ -1,0 +1,7 @@
+{
+  "policyId": "tibo-million-resets-through-10m",
+  "version": "1.0.0",
+  "stepUsers": 1000000,
+  "finalPledgedTargetUsers": 10000000,
+  "status": "active"
+}

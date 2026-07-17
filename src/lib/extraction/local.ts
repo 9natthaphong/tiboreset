@@ -1,1 +1,42 @@
-import type{Extraction}from"./schema";export function localExtract(text:string):Extraction{const s=text.toLowerCase(),confirmed=/\b(reset (is|has been)|quota reset|reset confirmed)\b/.test(s),hint=/\b(reset|tokens? flow|limit refresh)\b/.test(s),milestone=s.match(/(\d[\d,]*)\s*(?:of|\/|toward)\s*(\d[\d,]*)/),poll=/\?|poll/.test(s),capacity=/capacity|overload|demand/.test(s),incident=/incident|degraded|outage/.test(s);let event_type:Extraction["event_type"]=confirmed?"explicit_reset_confirmation":hint?"reset_hint":milestone?"milestone_progress":incident?"usage_incident":capacity?"capacity_signal":poll?"community_poll":"irrelevant";const relevant=event_type!=="irrelevant";return{is_relevant:relevant,relevance_reason:relevant?"Deterministic keyword/pattern match (heuristic)":"No configured reset signal found",event_type,reset_mentioned:confirmed||hint,reset_confirmed:confirmed,commitment_strength:confirmed?.95:hint?.55:0,milestone_target:milestone?Number(milestone[2].replaceAll(",","")):null,milestone_current:milestone?Number(milestone[1].replaceAll(",","")):null,incident_strength:incident?.7:0,capacity_concern:capacity?.7:0,promotional_signal:/promo|bonus|free/.test(s)?.7:0,time_reference:/tomorrow|soon|next/.test(s)?"near_future":"current",reset_type:confirmed?"full":hint?"unknown":"none",evidence_quotes:relevant?[text.slice(0,160)]:[],uncertainties:confirmed?[]:["Heuristic extraction; playful or conditional wording may be ambiguous."],extraction_confidence:confirmed?.94:relevant?.72:.9,requires_review:relevant&&!confirmed};}
+import { parseMilestoneSignal } from "@/lib/milestones";
+import type { Extraction } from "./schema";
+
+export function localExtract(text: string): Extraction {
+  const lower = text.toLowerCase();
+  const milestone = parseMilestoneSignal(text);
+  const poll = /\?|\bpoll\b/.test(lower);
+  const capacity = /capacity|overload|demand/.test(lower);
+  const incident = /incident|degraded|outage/.test(lower);
+  const resetHint = /\b(reset|tokens? flow|limit refresh)\b/.test(lower);
+  const explicitReset = milestone?.resetType === "full" || milestone?.resetType === "banked";
+  const relevant = Boolean(milestone || resetHint || incident || capacity || poll);
+  let eventType: Extraction["event_type"] = "irrelevant";
+  if (explicitReset) eventType = "explicit_reset_confirmation";
+  else if (milestone?.resetType === "scheduled") eventType = "milestone_commitment";
+  else if (milestone) eventType = "milestone_progress";
+  else if (resetHint) eventType = "reset_hint";
+  else if (incident) eventType = "usage_incident";
+  else if (capacity) eventType = "capacity_signal";
+  else if (poll) eventType = "community_poll";
+  const ambiguous = Boolean(milestone?.ambiguous || (poll && resetHint));
+  return {
+    is_relevant: relevant,
+    relevance_reason: relevant ? "Deterministic keyword and milestone pattern match (heuristic)" : "No configured reset signal found",
+    event_type: eventType,
+    reset_mentioned: explicitReset || resetHint || Boolean(milestone && milestone.resetType !== "announcement_only"),
+    reset_confirmed: explicitReset && !ambiguous,
+    commitment_strength: explicitReset ? 0.95 : milestone?.resetType === "scheduled" ? 0.85 : resetHint ? 0.55 : 0,
+    milestone_target: null,
+    milestone_current: milestone?.reportedActiveUsers ?? null,
+    milestone_denominator: milestone?.denominator ?? "unknown",
+    incident_strength: incident ? 0.7 : 0,
+    capacity_concern: capacity ? 0.7 : 0,
+    promotional_signal: /promo|bonus|free/.test(lower) ? 0.7 : 0,
+    time_reference: milestone?.resetType === "scheduled" || /tomorrow|soon|next/.test(lower) ? "near_future" : relevant ? "current" : "none",
+    reset_type: milestone?.resetType ?? (resetHint ? "unknown" : "none"),
+    evidence_quotes: relevant ? [text.slice(0, 160)] : [],
+    uncertainties: ambiguous ? ["Ambiguous, playful, conditional, or interrogative wording requires review."] : relevant ? ["Heuristic extraction; final structured extraction may refine this event."] : [],
+    extraction_confidence: explicitReset && !ambiguous ? 0.96 : milestone && !ambiguous ? 0.9 : relevant ? 0.65 : 0.9,
+    requires_review: relevant && (ambiguous || !milestone),
+  };
+}

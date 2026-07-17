@@ -11,7 +11,9 @@ import { createDemoLatestPosts, parseLatestPostsLimit } from "@/lib/latest-posts
 import { getEmailConfigurationStatus } from "@/lib/notifications/email-config";
 import { loadExternalContextEvents } from "@/lib/external-context";
 import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHistory } from "@/lib/historical-data";
-import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMode, PublicSnapshot, ResetHistoryItem } from "@/lib/public-data-types";
+import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMilestoneState, PublicMode, PublicSnapshot, ResetHistoryItem } from "@/lib/public-data-types";
+import { buildMilestoneSeedRows } from "@/lib/historical-data";
+import { deriveMilestoneState, type MilestoneEvent } from "@/lib/milestones";
 
 const eventTypes = ["explicit_reset_confirmation","reset_hint","milestone_commitment","milestone_progress","usage_incident","capacity_signal","limit_policy_change","product_launch","promotion","community_poll","general_codex_update","irrelevant"] as const;
 const eventTypeSchema = z.enum(eventTypes);
@@ -85,13 +87,20 @@ function mergeVerifiedResetHistory(primary: ResetHistoryItem[], seeded = histori
   const seen = new Set<string>();
   return [...seeded, ...primary]
     .filter(item => {
-      const key = item.id;
+      const key = item.sourcePostId ?? item.id;
       if (seen.has(key)) return false;
       seen.add(key);
       return item.verificationStatus !== "rejected";
     })
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 }
+
+function publicMilestoneState(events: MilestoneEvent[]): PublicMilestoneState {
+  const state = deriveMilestoneState(events);
+  return { latestReportedUsers: state.latestReported?.reportedActiveUsers ?? null, latestVerifiedResetUsers: state.latestVerifiedReset?.reportedActiveUsers ?? null, latestResetType: state.latestVerifiedReset?.resetType ?? null, latestEventDate: state.latestVerifiedReset?.announcedAt ?? null, nextTargetUsers: state.nextTargetUsers, progressPercent: state.progressPercent, pledgedMilestoneReached: state.pledgedMilestoneReached, policyId: state.policy.policyId };
+}
+
+const seedMilestoneState = () => publicMilestoneState(buildMilestoneSeedRows());
 
 function demoHealth(): PublicHealth {
   const forecast = currentForecast();
@@ -219,6 +228,10 @@ function historyFromForecasts(forecasts: Forecast[], evidence: Evidence[]): Hist
 }
 
 async function liveResetHistory(client: SupabaseClient): Promise<ResetHistoryItem[]> {
+  const milestoneResult = await client.from("milestone_events").select("id,source_post_id,source_url,source_account,reported_active_users,denominator,reset_type,announced_at,verification_status").eq("verification_status", "verified").order("announced_at", { ascending: false }).limit(50);
+  if (!milestoneResult.error) {
+    return (milestoneResult.data ?? []).map((row, index, rows) => ({ id: String(row.id), date: String(row.announced_at), type: String(row.reset_type), reason: "user_milestone", description: `${Number(row.reported_active_users) / 1_000_000}M ${String(row.denominator).replaceAll("_", " ")} milestone.`, sourceUrl: String(row.source_url), included: true, timeSincePreviousDays: rows[index + 1] ? Math.round((Date.parse(String(row.announced_at)) - Date.parse(String(rows[index + 1].announced_at))) / 864e5) : undefined, milestoneUsers: Number(row.reported_active_users), verificationBadge: "verified", sourceAccount: String(row.source_account), verificationStatus: "verified", historicalSource: "live", sourcePostId: String(row.source_post_id), denominator: row.denominator as ResetHistoryItem["denominator"] }));
+  }
   const result = await client.from("known_reset_events").select("id,occurred_at,reset_type,reason_category,description,source_post_id").eq("verified", true).order("occurred_at", { ascending: false }).limit(20);
   if (result.error) throw new Error("reset history unavailable");
   const rows = z.array(z.object({ id: z.string(), occurred_at: z.string(), reset_type: z.string(), reason_category: z.string().nullable(), description: z.string(), source_post_id: z.string().nullable() })).parse(result.data ?? []);
@@ -227,6 +240,13 @@ async function liveResetHistory(client: SupabaseClient): Promise<ResetHistoryIte
   if (sourceResult.error) throw new Error("reset sources unavailable");
   const urls = new Map((sourceResult.data ?? []).map(item => [String(item.id), typeof item.post_url === "string" ? item.post_url : undefined]));
   return rows.map((row, index) => ({ id: row.id, date: row.occurred_at, type: row.reset_type, reason: row.reason_category ?? "Unspecified", description: row.description, sourceUrl: row.source_post_id ? urls.get(row.source_post_id) : undefined, included: true, timeSincePreviousDays: rows[index + 1] ? Math.round((Date.parse(row.occurred_at) - Date.parse(rows[index + 1].occurred_at)) / 864e5) : undefined, milestoneUsers: extractMilestoneUsers(row.reason_category, row.description), verificationStatus: "verified" as const, historicalSource: "live" as const }));
+}
+
+async function liveMilestoneState(client: SupabaseClient): Promise<PublicMilestoneState> {
+  const result = await client.from("milestone_events").select("id,source_post_id,source_url,source_account,reported_active_users,denominator,reset_type,announced_at,execution_at,verification_status,verification_method,rejection_reason").eq("verification_status", "verified");
+  if (result.error) return seedMilestoneState();
+  const events = (result.data ?? []).map(row => ({ id: String(row.id), sourcePostId: String(row.source_post_id), sourceUrl: String(row.source_url), sourceAccount: String(row.source_account), reportedActiveUsers: Number(row.reported_active_users), denominator: row.denominator, resetType: row.reset_type, announcedAt: String(row.announced_at), executionAt: row.execution_at ? String(row.execution_at) : null, verificationStatus: row.verification_status, verificationMethod: String(row.verification_method), rejectionReason: row.rejection_reason ? String(row.rejection_reason) : null })) as MilestoneEvent[];
+  return publicMilestoneState(events.length ? events : buildMilestoneSeedRows());
 }
 
 export async function getPublicHealth(): Promise<PublicHealth> {
@@ -252,11 +272,11 @@ export async function getPublicSnapshot(): Promise<PublicSnapshot> {
       const forecasts = await liveForecasts(client);
       const forecast = forecasts.at(-1)!;
       const evidence = await liveEvidence(client, forecast.sourcePostIds);
-      const [latestPosts, resetHistory, health] = await Promise.all([livePosts(client, 20), liveResetHistory(client), getPublicHealth()]);
-      return { forecast, history: historyFromForecasts(forecasts, evidence), evidence, latestPosts, resetHistory: mergeVerifiedResetHistory(resetHistory), historicalDataset, externalContextEvents, health };
+      const [latestPosts, resetHistory, milestoneState, health] = await Promise.all([livePosts(client, 20), liveResetHistory(client), liveMilestoneState(client), getPublicHealth()]);
+      return { forecast, history: historyFromForecasts(forecasts, evidence), evidence, latestPosts, resetHistory: mergeVerifiedResetHistory(resetHistory), milestoneState, historicalDataset, externalContextEvents, health };
     } catch { /* Safe, clearly labelled Demo fallback below. */ }
   }
-  return { forecast: { ...currentForecast(), mode: "demo" }, history: demoHistory(), evidence: state().evidence, latestPosts: demoPosts(20), resetHistory: demoResetHistory(), historicalDataset, externalContextEvents, health: demoHealth() };
+  return { forecast: { ...currentForecast(), mode: "demo" }, history: demoHistory(), evidence: state().evidence, latestPosts: demoPosts(20), resetHistory: demoResetHistory(), milestoneState: seedMilestoneState(), historicalDataset, externalContextEvents, health: demoHealth() };
 }
 
 export async function getForecastHistory(): Promise<Forecast[]> {

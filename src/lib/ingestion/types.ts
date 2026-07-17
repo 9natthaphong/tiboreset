@@ -1,6 +1,7 @@
 import type { Extraction } from "@/lib/extraction/schema";
 import type { Forecast, ForecastContext } from "@/lib/forecasting";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
+import type { MilestoneEvent } from "@/lib/milestones";
 
 export type StoredAccount = SocialAccount & { databaseId: string; latestProcessedPostId?: string };
 export type StoredPost = { databaseId: string; platformPostId: string };
@@ -37,6 +38,8 @@ export interface IngestionRepository {
   findExistingPostIds(platformPostIds: string[]): Promise<Set<string>>;
   insertPost(input: { account: StoredAccount; post: SocialPost; localScreen: Extraction }): Promise<StoredPost>;
   insertExtraction(input: { post: StoredPost; result: ExtractionResult; forecastImpact: number }): Promise<StoredExtraction>;
+  getLatestVerifiedMilestoneUsers?(): Promise<number | null>;
+  upsertMilestoneCandidate?(input: { candidate: MilestoneEvent; post: StoredPost }): Promise<void>;
   loadForecastEvidence(): Promise<import("@/lib/forecasting").Evidence[]>;
   loadForecastContext?(): Promise<ForecastContext>;
   saveForecast(forecast: Forecast): Promise<string>;

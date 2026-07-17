@@ -10,13 +10,14 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Evidence, Forecast } from "@/lib/forecasting";
 import type { ExternalContextEvent } from "@/lib/external-context";
-import type { HistoricalDatasetSummary, HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, ResetHistoryItem } from "@/lib/public-data-types";
+import type { HistoricalDatasetSummary, HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMilestoneState, ResetHistoryItem } from "@/lib/public-data-types";
 import { getUsageGuidance } from "@/lib/usage-guidance";
 import { CinematicHero } from "./cinematic-hero";
+import { deriveMilestoneState } from "@/lib/milestones";
 
 const Charts = dynamic(() => import("./oracle-charts"), { ssr: false, loading: () => <div className="chart-loading">Loading forecast record…</div> });
 type Analog = { date: string; eventType: string; similarity: number; outcome: string; source: string; followed: boolean | null; forecastBefore?: number };
-type Props = { initialForecast: Forecast; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; historicalDataset: HistoricalDatasetSummary; externalContextEvents: ExternalContextEvent[]; health: PublicHealth; analogs: Analog[]; renderedAt: string; emailAlertsConfigured: boolean };
+type Props = { initialForecast: Forecast; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; milestoneState: PublicMilestoneState; historicalDataset: HistoricalDatasetSummary; externalContextEvents: ExternalContextEvent[]; health: PublicHealth; analogs: Analog[]; renderedAt: string; emailAlertsConfigured: boolean };
 
 const formatTimestamp = (value: string) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value));
 const formatDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(value));
@@ -36,7 +37,7 @@ const historyFromForecasts = (forecasts: Forecast[], evidence: Evidence[]): Hist
   return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: item?.excerpt, eventType: item?.eventType, evidencePostId: item?.postId, verified: item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect };
 });
 
-export function OracleExperience({ initialForecast, evidence: initialEvidence, history: initialHistory, latestPosts: initialPosts, resetHistory: initialResetHistory, historicalDataset, externalContextEvents, health: initialHealth, analogs, renderedAt, emailAlertsConfigured }: Props) {
+export function OracleExperience({ initialForecast, evidence: initialEvidence, history: initialHistory, latestPosts: initialPosts, resetHistory: initialResetHistory, milestoneState, historicalDataset, externalContextEvents, health: initialHealth, analogs, renderedAt, emailAlertsConfigured }: Props) {
   const [forecast, setForecast] = useState(initialForecast);
   const [evidence, setEvidence] = useState(initialEvidence);
   const [history, setHistory] = useState(initialHistory);
@@ -61,11 +62,14 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
   const trend = currentProbability > previousProbability ? "Rising" : currentProbability < previousProbability ? "Falling" : "Steady";
   const confirmed = forecast.features.explicit_reset_confirmation > .9;
   const guidance = getUsageGuidance(forecast.probability, confirmed);
-  const latestMilestone = resetHistory
-    .filter(item => item.milestoneUsers && (forecast.mode === "demo" || item.historicalSource !== "demo"))
-    .sort((a, b) => (b.milestoneUsers ?? 0) - (a.milestoneUsers ?? 0))[0];
-  const latestKnownReset = latestMilestone
-    ? `${forecast.mode === "demo" ? "Demo · " : ""}${(latestMilestone.milestoneUsers ?? 0) / 1_000_000}M combined active users`
+  const currentMilestoneState = useMemo<PublicMilestoneState>(() => {
+    const events = resetHistory.filter(item => item.milestoneUsers && item.sourcePostId && item.sourceUrl && item.denominator).map(item => ({ sourcePostId: item.sourcePostId!, sourceUrl: item.sourceUrl!, sourceAccount: item.sourceAccount ?? "@thsottiaux", reportedActiveUsers: item.milestoneUsers!, denominator: item.denominator!, resetType: (["full", "banked", "scheduled", "announcement_only"].includes(item.type) ? item.type : "announcement_only") as "full" | "banked" | "scheduled" | "announcement_only", announcedAt: item.date, executionAt: item.type === "full" || item.type === "banked" ? item.date : null, verificationStatus: "verified" as const, verificationMethod: "public_snapshot", rejectionReason: null }));
+    if (!events.length) return milestoneState;
+    const derived = deriveMilestoneState(events);
+    return { latestReportedUsers: derived.latestReported?.reportedActiveUsers ?? null, latestVerifiedResetUsers: derived.latestVerifiedReset?.reportedActiveUsers ?? null, latestResetType: derived.latestVerifiedReset?.resetType ?? null, latestEventDate: derived.latestVerifiedReset?.announcedAt ?? null, nextTargetUsers: derived.nextTargetUsers, progressPercent: derived.progressPercent, pledgedMilestoneReached: derived.pledgedMilestoneReached, policyId: derived.policy.policyId };
+  }, [milestoneState, resetHistory]);
+  const latestKnownReset = currentMilestoneState.latestVerifiedResetUsers
+    ? `${forecast.mode === "demo" ? "Demo · " : ""}${currentMilestoneState.latestVerifiedResetUsers / 1_000_000}M combined active users`
     : historicalDataset.latestMilestoneLabel ?? "Not yet seeded";
 
   const refreshPublicData = useCallback((announce = true) => {
@@ -209,7 +213,7 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
 
     <MarketPressure events={externalContextEvents}/>
 
-    <ResetHistory resetHistory={resetHistory} historicalDataset={historicalDataset} mode={forecast.mode}/>
+    <ResetHistory resetHistory={resetHistory} milestoneState={currentMilestoneState} historicalDataset={historicalDataset} mode={forecast.mode}/>
 
     <HowForecastIsCalculated forecast={forecast}/>
 
@@ -219,9 +223,9 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
   </main>;
 }
 
-function ResetHistory({ resetHistory, historicalDataset, mode }: { resetHistory: ResetHistoryItem[]; historicalDataset: HistoricalDatasetSummary; mode: "demo" | "live" }) {
+function ResetHistory({ resetHistory, milestoneState, historicalDataset, mode }: { resetHistory: ResetHistoryItem[]; milestoneState: PublicMilestoneState; historicalDataset: HistoricalDatasetSummary; mode: "demo" | "live" }) {
   const milestoneRecords = resetHistory.filter(item => item.milestoneUsers);
-  const latestMilestone = [...milestoneRecords].sort((a, b) => (b.milestoneUsers ?? 0) - (a.milestoneUsers ?? 0))[0];
+  const latestMilestone = milestoneRecords.find(item => item.milestoneUsers === milestoneState.latestReportedUsers) ?? [...milestoneRecords].sort((a, b) => (b.milestoneUsers ?? 0) - (a.milestoneUsers ?? 0))[0];
   const nonMilestoneRecords = resetHistory.filter(item => !item.milestoneUsers);
   const sourceLabel = resetHistory.some(item => item.historicalSource === "seed") ? "Human-verified local seed" : mode === "demo" ? "Synthetic demo fixture" : "Reviewed live records";
 
@@ -233,15 +237,15 @@ function ResetHistory({ resetHistory, historicalDataset, mode }: { resetHistory:
       <strong>{(latestMilestone.milestoneUsers ?? 0) / 1_000_000}M <small>CODEX + CHATGPT WORK</small></strong>
       <b>{latestMilestone.type === "scheduled" ? "RESET SCHEDULED" : `${latestMilestone.type.toUpperCase()} RESET ANNOUNCED`}</b>
       <time dateTime={latestMilestone.displayDateThailand ?? latestMilestone.date}>{latestMilestone.displayDateThailand ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" }).format(new Date(`${latestMilestone.displayDateThailand}T00:00:00+07:00`)) : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(latestMilestone.date))}</time>
-      <div className="next-milestone"><span>NEXT PLEDGED MILESTONE</span><b>10M</b><small>MILESTONE PROGRESS · 90%</small></div>
+      <div className="next-milestone"><span>{milestoneState.pledgedMilestoneReached ? "PLEDGED MILESTONE REACHED" : "NEXT PLEDGED MILESTONE"}</span><b>{milestoneState.nextTargetUsers ? `${milestoneState.nextTargetUsers / 1_000_000}M` : "AWAITING NEW COMMITMENT"}</b><small>MILESTONE PROGRESS · {milestoneState.progressPercent ?? 0}%</small></div>
       <p>The July 9M figure covers Codex and ChatGPT Work combined. The latest official Codex-only figure was 5M+ weekly users on June 2.</p>
       {latestMilestone.sourceUrl && <a href={latestMilestone.sourceUrl} target="_blank" rel="noreferrer">View official post <ExternalLink size={14}/></a>}
     </div>}
 
     <div className="historical-provenance-row" aria-label="Historical dataset summary" data-reveal-support><span>HISTORICAL SEED · {historicalDataset.datasetVersion}</span><p><b>{historicalDataset.confirmedResets}</b> confirmed resets</p><p><b>{historicalDataset.verifiedSources}</b> verified sources</p><p><b>{historicalDataset.negativeWindows}</b> verified negative windows</p><small><Database size={14}/> {sourceLabel}</small></div>
 
-    <div className="milestone-story" aria-label="Three million through nine million user milestone reset ledger" data-reveal-support><div className="milestone-progress-line" aria-hidden="true"/>
-      {Array.from({ length: 7 }, (_, index) => (index + 3) * 1_000_000).map(milestoneUsers => {
+    <div className="milestone-story" aria-label="Verified user milestone reset ledger" data-reveal-support><div className="milestone-progress-line" aria-hidden="true"/>
+      {[...new Set(milestoneRecords.map(item => item.milestoneUsers!))].sort((a, b) => a - b).map(milestoneUsers => {
         const record = milestoneRecords.find(item => item.milestoneUsers === milestoneUsers);
         const isLatest = Boolean(record && latestMilestone && record.id === latestMilestone.id);
         return <article key={milestoneUsers} className={`milestone-node ${record ? "is-confirmed" : "is-unseeded"} ${isLatest ? "is-latest" : ""}`}>

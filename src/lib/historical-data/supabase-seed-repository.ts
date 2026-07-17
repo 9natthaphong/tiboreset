@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HistoricalSeedRepository, KnownResetSeedRow } from "./index";
+import type { MilestoneEvent } from "@/lib/milestones";
 
 function throwOnError(error: { message: string } | null, context: string): void {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -7,6 +8,21 @@ function throwOnError(error: { message: string } | null, context: string): void 
 
 export class SupabaseHistoricalSeedRepository implements HistoricalSeedRepository {
   constructor(private readonly client: SupabaseClient) {}
+
+  async upsertMilestoneEvents(rows: MilestoneEvent[]) {
+    if (!rows.length) return { inserted: 0, updated: 0, duplicateRecordsSkipped: 0 };
+    const existing = await this.client.from("milestone_events").select("source_post_id").in("source_post_id", rows.map(row => row.sourcePostId));
+    throwOnError(existing.error, "Unable to inspect milestone seed ledger");
+    const existingIds = new Set((existing.data ?? []).map(row => String(row.source_post_id)));
+    const result = await this.client.from("milestone_events").upsert(rows.map(row => ({
+      source_post_id: row.sourcePostId, source_url: row.sourceUrl, source_account: row.sourceAccount,
+      reported_active_users: row.reportedActiveUsers, denominator: row.denominator, reset_type: row.resetType,
+      announced_at: row.announcedAt, execution_at: row.executionAt, verification_status: row.verificationStatus,
+      verification_method: row.verificationMethod, rejection_reason: row.rejectionReason, updated_at: new Date().toISOString(),
+    })), { onConflict: "source_post_id" });
+    throwOnError(result.error, "Unable to import milestone seed ledger");
+    return { inserted: rows.filter(row => !existingIds.has(row.sourcePostId)).length, updated: rows.filter(row => existingIds.has(row.sourcePostId)).length, duplicateRecordsSkipped: 0 };
+  }
 
   async upsertKnownResetEvents(rows: KnownResetSeedRow[]) {
     if (!rows.length) return { inserted: 0, updated: 0, duplicateRecordsSkipped: 0 };

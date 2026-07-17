@@ -53,6 +53,19 @@ export type ResetHistoryItem = {
   sourceAccount?: string;
   verificationStatus?: "verified" | "unverified" | "rejected";
   historicalSource?: "seed" | "live" | "demo";
+  sourcePostId?: string;
+  denominator?: "codex_only" | "codex_and_chatgpt_work" | "unknown";
+};
+
+export type PublicMilestoneState = {
+  latestReportedUsers: number | null;
+  latestVerifiedResetUsers: number | null;
+  latestResetType: "full" | "banked" | "scheduled" | "announcement_only" | null;
+  latestEventDate: string | null;
+  nextTargetUsers: number | null;
+  progressPercent: number | null;
+  pledgedMilestoneReached: boolean;
+  policyId: string;
 };
 
 export type HistoricalDatasetSummary = {
@@ -85,6 +98,7 @@ export type PublicSnapshot = {
   evidence: Evidence[];
   latestPosts: LatestPostsResponse;
   resetHistory: ResetHistoryItem[];
+  milestoneState: PublicMilestoneState;
   historicalDataset: HistoricalDatasetSummary;
   externalContextEvents: ExternalContextEvent[];
   health: PublicHealth;

@@ -4,6 +4,8 @@ import { loadHistoricalDatasets } from "@/lib/historical-data";
 import { loadExternalContextEvents, ReviewedOpenAIStatusAdapter } from "@/lib/external-context";
 import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
 import { getServiceSupabase, isServiceSupabaseConfigured } from "@/lib/supabase/server";
+import { buildMilestoneSeedRows } from "@/lib/historical-data";
+import { deriveMilestoneState } from "@/lib/milestones";
 
 const backtestSchema = z.object({ cutoff_at: z.string(), horizon_hours: z.number(), predicted_probability: z.coerce.number(), actual_outcome: z.boolean(), brier_loss: z.coerce.number(), model_version: z.string(), evidence_count: z.number() });
 const runSchema = z.object({ id: z.string(), completed_at: z.string().nullable(), status: z.string(), posts_read: z.number().nullable(), posts_inserted: z.number().nullable(), posts_analyzed: z.number().nullable(), metadata: z.record(z.string(), z.unknown()).nullable() });
@@ -30,11 +32,13 @@ export async function getDataLabSnapshot() {
     sources: datasets.manifest.sources,
     resetLedger: datasets.ledger.records,
   };
-  const context = { externalContext: externalContext.events, operationalEvents, nextPledgedMilestoneUsers: 10_000_000 };
+  const seedMilestones = buildMilestoneSeedRows(datasets);
+  const seedMilestoneState = deriveMilestoneState(seedMilestones);
+  const context = { externalContext: externalContext.events, operationalEvents, milestoneCandidates: seedMilestones, milestoneState: seedMilestoneState };
   if (!isServiceSupabaseConfigured()) return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
   try {
     const client = getServiceSupabase();
-    const [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails] = await Promise.all([
+    const [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails, milestones] = await Promise.all([
       client.from("source_posts").select("id", { count: "exact", head: true }),
       client.from("extracted_events").select("id", { count: "exact", head: true }),
       client.from("known_reset_events").select("id", { count: "exact", head: true }),
@@ -44,11 +48,13 @@ export async function getDataLabSnapshot() {
       client.from("ingestion_runs").select("id,completed_at,status,posts_read,posts_inserted,posts_analyzed,metadata").order("started_at", { ascending: false }).limit(20),
       client.from("extracted_events").select("id,source_post_id,extraction_version,event_type,event_payload,extraction_confidence,requires_review,created_at").order("created_at", { ascending: false }).limit(20),
       client.from("source_posts").select("id,platform_post_id,post_url,text,posted_at").order("posted_at", { ascending: false }).limit(40),
+      client.from("milestone_events").select("id,source_post_id,source_url,source_account,reported_active_users,denominator,reset_type,announced_at,execution_at,verification_status,verification_method,rejection_reason").order("announced_at", { ascending: false }).limit(100),
     ]);
-    for (const result of [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails]) if (result.error) throw result.error;
+    for (const result of [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails, milestones]) if (result.error) throw result.error;
     const parsedPosts = z.array(postDetailSchema).parse(postDetails.data ?? []);
     const postById = new Map(parsedPosts.map(post => [post.id, post]));
     const extractedEvents = z.array(eventDetailSchema).parse(eventDetails.data ?? []).map(event => ({ ...event, source: postById.get(event.source_post_id) ?? null }));
+    const milestoneCandidates = (milestones.data ?? []).map(row => ({ id: String(row.id), sourcePostId: String(row.source_post_id), sourceUrl: String(row.source_url), sourceAccount: String(row.source_account), reportedActiveUsers: Number(row.reported_active_users), denominator: row.denominator, resetType: row.reset_type, announcedAt: String(row.announced_at), executionAt: row.execution_at ? String(row.execution_at) : null, verificationStatus: row.verification_status, verificationMethod: String(row.verification_method), rejectionReason: row.rejection_reason ? String(row.rejection_reason) : null })) as typeof seedMilestones;
     return {
       database: "connected" as const,
       seed,
@@ -59,6 +65,8 @@ export async function getDataLabSnapshot() {
       ingestionRuns: z.array(runSchema).parse(runs.data ?? []),
       extractedEvents,
       ...context,
+      milestoneCandidates,
+      milestoneState: deriveMilestoneState(milestoneCandidates),
     };
   } catch {
     return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };

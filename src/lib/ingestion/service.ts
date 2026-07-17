@@ -2,6 +2,7 @@ import type { Extraction } from "@/lib/extraction/schema";
 import { forecastFromEvidence } from "@/lib/forecasting";
 import type { SocialPost, SocialSourceAdapter } from "@/lib/social/adapters";
 import type { ExtractionResult, IngestionReport, IngestionRepository } from "./types";
+import { createMilestoneCandidate } from "@/lib/milestones";
 
 const MAX_X_POSTS_PER_RUN = 10;
 
@@ -75,6 +76,16 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
       const result = await dependencies.extractRelevant(post.text, localScreen);
       postsAnalyzed += 1;
       await dependencies.repository.insertExtraction({ post: storedPost, result, forecastImpact: deterministicForecastImpact(result.extraction) });
+      const latestVerifiedUsers = await dependencies.repository.getLatestVerifiedMilestoneUsers?.();
+      const candidate = createMilestoneCandidate({
+        text: post.text,
+        sourcePostId: post.id,
+        sourceUrl: post.url,
+        sourceAccount: account.username,
+        announcedAt: post.createdAt,
+        latestVerifiedUsers,
+      });
+      if (candidate) await dependencies.repository.upsertMilestoneCandidate?.({ candidate, post: storedPost });
       if (result.extraction.is_relevant) relevantEvidenceChanged = true;
     }
     let forecastId: string | null = null;

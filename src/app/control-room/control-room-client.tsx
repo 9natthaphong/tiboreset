@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { LabNavigation } from "@/components/lab-navigation";
 
 type OutboxMessage = { id: string; subject: string; recipient: string; type: string; status: string; html: string };
+type MilestoneCandidate = { id: string; source_post_id: string; source_url: string; reported_active_users: number; denominator: string; reset_type: string; verification_status: string; rejection_reason: string | null };
 
 export function ControlRoomClient({ live, adminConfigured }: { live: boolean; adminConfigured: boolean }) {
   const [outbox, setOutbox] = useState<OutboxMessage[]>([]);
@@ -12,12 +13,17 @@ export function ControlRoomClient({ live, adminConfigured }: { live: boolean; ad
   const [adminSecret, setAdminSecret] = useState("");
   const [unlocked, setUnlocked] = useState(!live);
   const [busy, setBusy] = useState(false);
+  const [milestones, setMilestones] = useState<MilestoneCandidate[]>([]);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/lab/email-outbox", { cache: "no-store", headers: live && adminSecret ? { Authorization: `Bearer ${adminSecret}` } : undefined });
     if (!response.ok) return;
     const json = await response.json() as { data?: OutboxMessage[] };
     setOutbox(json.data ?? []);
+    if (live && adminSecret) {
+      const milestoneResponse = await fetch("/api/lab/milestones", { cache: "no-store", headers: { Authorization: `Bearer ${adminSecret}` } });
+      if (milestoneResponse.ok) setMilestones(((await milestoneResponse.json()) as { data?: MilestoneCandidate[] }).data ?? []);
+    }
   }, [adminSecret, live]);
 
   useEffect(() => {
@@ -35,6 +41,14 @@ export function ControlRoomClient({ live, adminConfigured }: { live: boolean; ad
     const response = await fetch("/api/lab/authorize", { method: "POST", headers: live && adminSecret ? { Authorization: `Bearer ${adminSecret}` } : undefined });
     if (response.ok) { setUnlocked(true); setNote("Control Room unlocked for this browser session."); }
     else setNote(response.status === 429 ? "Too many attempts. Try again later." : "Administrative access required.");
+    setBusy(false);
+  };
+
+  const reviewMilestone = async (id: string, status: "verified" | "rejected") => {
+    setBusy(true);
+    const response = await fetch("/api/lab/milestones", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminSecret}` }, body: JSON.stringify({ id, status, rejectionReason: status === "rejected" ? "Rejected by administrator after source review." : null }) });
+    setNote(response.ok ? `Milestone candidate ${status}.` : "Milestone review failed.");
+    await refresh();
     setBusy(false);
   };
 
@@ -66,6 +80,7 @@ export function ControlRoomClient({ live, adminConfigured }: { live: boolean; ad
     </section> : <>
       {live && <section><h2>Live ingestion</h2><p>Check X uses the same bounded ingestion service as the protected cron route. The initial read is capped at 10; later reads use the stored cursor.</p><div className="lab-actions"><button disabled={busy} onClick={() => act("/api/lab/ingest")}>Check X now</button></div></section>}
       <section><h2>{live ? "Administrative actions" : "Demo simulations"}</h2><div className="lab-actions"><button disabled={busy} onClick={() => act("/api/lab/simulate-confirmation")}>Simulate confirmation</button><button disabled={busy} onClick={() => act("/api/lab/demo-event")}>Simulate forecast crossing 70%</button><button disabled={busy} onClick={() => act("/api/internal/notifications/evaluate")}>Run notification evaluation</button><button disabled={busy} onClick={() => act("/api/lab/simulate-reset")}>Simulate confirmed reset</button><button disabled={busy} onClick={() => act("/api/lab/reset-demo")}>Reset demo state</button></div></section>
+      {live && <section><h2>Milestone review</h2><p>Only candidates that need review can be approved or rejected here.</p><div className="data-source-records">{milestones.filter(item => item.verification_status === "needs_review" || item.verification_status === "extracted").map(item => <article key={item.id}><b>{item.reported_active_users / 1_000_000}M · {item.denominator.replaceAll("_", " ")} · {item.reset_type}</b><a href={item.source_url} target="_blank" rel="noreferrer">Review source</a><div className="lab-actions"><button disabled={busy} onClick={() => reviewMilestone(item.id, "verified")}>Verify</button><button disabled={busy} onClick={() => reviewMilestone(item.id, "rejected")}>Reject</button></div></article>)}</div></section>}
       <section><h2>Demo email outbox</h2><p>Recipients are masked. Generated previews are local fixtures, never proof of external delivery.</p><div className="outbox">{outbox.length === 0 ? <p>No demo emails yet. Subscribe on the homepage first.</p> : outbox.map(message => <article key={message.id}><div><b>{message.subject}</b><span>{message.recipient} · {message.type} · {message.status}</span></div><details><summary>Rendered preview</summary><iframe title={message.subject} srcDoc={message.html}/></details></article>)}</div></section>
     </>}
   </main>;

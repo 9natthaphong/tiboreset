@@ -14,11 +14,12 @@ export const ExtractionSchema = z.object({
   commitment_strength: z.number().min(0).max(1),
   milestone_target: z.number().int().nullable(),
   milestone_current: z.number().int().nullable(),
+  milestone_denominator: z.enum(["codex_only", "codex_and_chatgpt_work", "unknown"]),
   incident_strength: z.number().min(0).max(1),
   capacity_concern: z.number().min(0).max(1),
   promotional_signal: z.number().min(0).max(1),
   time_reference: z.enum(["past", "current", "near_future", "future_unspecified", "none"]),
-  reset_type: z.enum(["full", "banked", "temporary_limit_change", "unknown", "none"]),
+  reset_type: z.enum(["full", "banked", "scheduled", "announcement_only", "temporary_limit_change", "unknown", "none"]),
   evidence_quotes: z.array(z.string().max(180)),
   uncertainties: z.array(z.string()),
   extraction_confidence: z.number().min(0).max(1),
@@ -27,4 +28,3 @@ export const ExtractionSchema = z.object({
 
 export const ExtractionJsonSchema = z.toJSONSchema(ExtractionSchema, { target: "draft-7" });
 export type Extraction = z.infer<typeof ExtractionSchema>;
-

@@ -49,6 +49,7 @@ export function historicalDatasetSummary(datasets = loadHistoricalDatasets()) {
 }
 
 export function historicalSeedResetHistory(datasets = loadHistoricalDatasets()) {
+  const normalized = new Map(buildMilestoneSeedRows(datasets).map(event => [event.sourcePostId, event]));
   const records = datasets.ledger.records
     .filter(record => record.verificationStatus === "verified")
     .sort((a, b) => Date.parse(b.eventAt) - Date.parse(a.eventAt));
@@ -69,6 +70,8 @@ export function historicalSeedResetHistory(datasets = loadHistoricalDatasets()) 
     sourceAccount: "@thsottiaux",
     verificationStatus: record.verificationStatus,
     historicalSource: "seed" as const,
+    sourcePostId: record.sourcePostId ?? undefined,
+    denominator: record.sourcePostId ? normalized.get(record.sourcePostId)?.denominator : "unknown" as const,
   }));
 }
 
@@ -120,6 +123,23 @@ export type HistoricalSeedWriteReport = {
 
 export interface HistoricalSeedRepository {
   upsertKnownResetEvents(rows: KnownResetSeedRow[]): Promise<HistoricalSeedWriteReport>;
+  upsertMilestoneEvents?(rows: import("@/lib/milestones").MilestoneEvent[]): Promise<HistoricalSeedWriteReport>;
+}
+
+export function buildMilestoneSeedRows(datasets = loadHistoricalDatasets()): import("@/lib/milestones").MilestoneEvent[] {
+  const sourceById = new Map(datasets.manifest.sources.map(source => [source.id, source]));
+  return datasets.ledger.records.filter(record => record.verificationStatus === "verified" && record.sourcePostId).map(record => {
+    const source = sourceById.get(record.sourceManifestId);
+    const combined = /chatgpt\s+work/i.test(`${record.description} ${source?.sourceExcerpt ?? ""}`);
+    const codex = /\bcodex\b/i.test(`${record.description} ${source?.sourceExcerpt ?? ""}`);
+    return {
+      sourcePostId: record.sourcePostId!, sourceUrl: record.sourceUrl, sourceAccount: source?.sourceAccount ?? "@thsottiaux",
+      reportedActiveUsers: record.milestoneUsers, denominator: combined ? "codex_and_chatgpt_work" : codex ? "codex_only" : "unknown",
+      resetType: record.resetType === "banked" ? "banked" : record.resetType === "scheduled" ? "scheduled" : "full",
+      announcedAt: record.eventAt, executionAt: record.resetType === "scheduled" ? null : record.eventAt,
+      verificationStatus: "verified", verificationMethod: `historical_seed:${datasets.ledger.datasetVersion}`, rejectionReason: null,
+    };
+  });
 }
 
 export async function importHistoricalSeeds(repository: HistoricalSeedRepository, datasets = loadHistoricalDatasets()) {
@@ -127,6 +147,7 @@ export async function importHistoricalSeeds(repository: HistoricalSeedRepository
   const rows = parsedRows.filter(row => row.verified);
   const rejected = parsedRows.length - rows.length;
   const writeReport = await repository.upsertKnownResetEvents(rows);
+  if (repository.upsertMilestoneEvents) await repository.upsertMilestoneEvents(buildMilestoneSeedRows(datasets));
   return {
     datasetVersion: datasets.ledger.datasetVersion,
     ledgerRecords: datasets.ledger.records.length,

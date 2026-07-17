@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Extraction } from "@/lib/extraction/schema";
@@ -9,6 +10,7 @@ import { versionedForecastContext } from "@/lib/forecast-context";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import type { ExtractionResult, IngestionReport, IngestionRepository, StoredAccount, StoredExtraction, StoredPost } from "./types";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
+import { MILESTONE_TARGET_POLICY, type MilestoneEvent } from "@/lib/milestones";
 
 const accountSchema = z.object({ id: z.string().uuid(), platform_user_id: z.string(), username: z.string(), display_name: z.string().nullable(), profile_image_url: z.string().nullable(), latest_processed_post_id: z.string().nullable() });
 const postRowSchema = z.object({ id: z.string().uuid(), platform_post_id: z.string(), text: z.string(), post_url: z.string().nullable(), posted_at: z.string() });
@@ -32,8 +34,16 @@ function extractionPayload(result: ExtractionResult, forecastImpact: number) {
     extractionSource: result.source,
     fallbackUsed: result.source === "local_fallback",
     fallbackReason: result.fallbackReason ?? null,
-    schemaVersion: "reset-event-schema-1.0.0",
+    schemaVersion: "reset-event-schema-1.1.0",
   };
+}
+
+function stableUuid(value: string) {
+  const hex = createHash("sha256").update(value).digest("hex").slice(0, 32).split("");
+  hex[12] = "4";
+  hex[16] = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  const joined = hex.join("");
+  return `${joined.slice(0, 8)}-${joined.slice(8, 12)}-${joined.slice(12, 16)}-${joined.slice(16, 20)}-${joined.slice(20)}`;
 }
 
 export class SupabaseIngestionRepository implements IngestionRepository, HistoricalSeedRepository {
@@ -145,6 +155,44 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
     return { databaseId: String(result.data!.id) };
   }
 
+  async getLatestVerifiedMilestoneUsers(): Promise<number | null> {
+    const result = await this.client.from("milestone_events").select("reported_active_users").eq("verification_status", "verified").order("reported_active_users", { ascending: false }).limit(1).maybeSingle();
+    if (result.error?.message?.includes("milestone_events")) return null;
+    throwOnError(result.error, "Unable to read latest verified milestone");
+    return result.data ? Number(result.data.reported_active_users) : null;
+  }
+
+  async upsertMilestoneCandidate(input: { candidate: MilestoneEvent; post: StoredPost }): Promise<void> {
+    const candidate = input.candidate;
+    const result = await this.client.from("milestone_events").upsert({
+      source_post_id: candidate.sourcePostId,
+      source_url: candidate.sourceUrl,
+      source_account: candidate.sourceAccount,
+      reported_active_users: candidate.reportedActiveUsers,
+      denominator: candidate.denominator,
+      reset_type: candidate.resetType,
+      announced_at: candidate.announcedAt,
+      execution_at: candidate.executionAt,
+      verification_status: candidate.verificationStatus,
+      verification_method: candidate.verificationMethod,
+      rejection_reason: candidate.rejectionReason,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "source_post_id", ignoreDuplicates: true });
+    throwOnError(result.error, "Unable to persist milestone candidate");
+    if (candidate.verificationStatus !== "verified" || candidate.resetType === "announcement_only") return;
+    const reset = await this.client.from("known_reset_events").upsert({
+      id: stableUuid(`milestone:${candidate.sourcePostId}`),
+      occurred_at: candidate.executionAt ?? candidate.announcedAt,
+      reset_type: candidate.resetType,
+      reason_category: "user_milestone",
+      description: `${candidate.reportedActiveUsers / 1_000_000}M ${candidate.denominator.replaceAll("_", " ")} milestone: ${candidate.resetType} reset announcement.`,
+      source_post_id: input.post.databaseId,
+      verified: true,
+      verification_notes: `source_post_id=${candidate.sourcePostId} | method=${candidate.verificationMethod}`,
+    }, { onConflict: "id" });
+    throwOnError(reset.error, "Unable to synchronize verified milestone reset");
+  }
+
   async loadForecastEvidence(): Promise<Evidence[]> {
     const postResult = await this.client.from("source_posts").select("id,platform_post_id,text,post_url,posted_at").eq("platform", "x").eq("is_relevant", true).order("posted_at", { ascending: true }).limit(500);
     throwOnError(postResult.error, "Unable to load forecast source posts");
@@ -187,6 +235,10 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
     const base = versionedForecastContext(cutoff);
     const result = await this.client.from("known_reset_events").select("occurred_at,reset_type,reason_category,description,verified").eq("verified", true).lte("occurred_at", cutoff).order("occurred_at", { ascending: true });
     throwOnError(result.error, "Unable to load verified reset context");
+    const milestoneResult = await this.client.from("milestone_events").select("reported_active_users,announced_at,reset_type,verification_status").eq("verification_status", "verified").lte("announced_at", cutoff).order("announced_at", { ascending: true });
+    const milestoneRows = milestoneResult.error ? [] : milestoneResult.data ?? [];
+    const latestUsers = milestoneRows.reduce((max, row) => Math.max(max, Number(row.reported_active_users)), 0);
+    const nextTarget = latestUsers >= MILESTONE_TARGET_POLICY.finalPledgedTargetUsers ? null : base.nextPledgedMilestoneUsers;
     return {
       ...base,
       verifiedResets: (result.data ?? []).filter(row => row.reset_type !== "scheduled").map(row => {
@@ -198,6 +250,8 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
           verified: row.verified === true,
         };
       }),
+      milestoneObservations: milestoneRows.length ? milestoneRows.map(row => ({ occurredAt: String(row.announced_at), milestoneUsers: Number(row.reported_active_users), verified: true })) : base.milestoneObservations,
+      nextPledgedMilestoneUsers: nextTarget,
     };
   }
 
@@ -294,5 +348,15 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
       updated: changed.filter(row => existingById.has(row.id)).length,
       duplicateRecordsSkipped,
     };
+  }
+
+  async upsertMilestoneEvents(rows: MilestoneEvent[]) {
+    if (!rows.length) return { inserted: 0, updated: 0, duplicateRecordsSkipped: 0 };
+    const existing = await this.client.from("milestone_events").select("source_post_id").in("source_post_id", rows.map(row => row.sourcePostId));
+    throwOnError(existing.error, "Unable to inspect milestone seed ledger");
+    const ids = new Set((existing.data ?? []).map(row => String(row.source_post_id)));
+    const result = await this.client.from("milestone_events").upsert(rows.map(candidate => ({ source_post_id: candidate.sourcePostId, source_url: candidate.sourceUrl, source_account: candidate.sourceAccount, reported_active_users: candidate.reportedActiveUsers, denominator: candidate.denominator, reset_type: candidate.resetType, announced_at: candidate.announcedAt, execution_at: candidate.executionAt, verification_status: candidate.verificationStatus, verification_method: candidate.verificationMethod, rejection_reason: candidate.rejectionReason, updated_at: new Date().toISOString() })), { onConflict: "source_post_id" });
+    throwOnError(result.error, "Unable to import milestone seed ledger");
+    return { inserted: rows.filter(row => !ids.has(row.sourcePostId)).length, updated: rows.filter(row => ids.has(row.sourcePostId)).length, duplicateRecordsSkipped: 0 };
   }
 }
