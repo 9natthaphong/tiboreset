@@ -213,7 +213,7 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
                         </button>
                       ))}
                     </div>
-                    <div className="chart-scroll">
+                    <div className="chart-scroll" role="region" aria-label="Scrollable reset probability chart" tabIndex={0}>
                       <ResponsiveContainer width="100%" height={360}>
                         <ComposedChart data={historyData} margin={{ top: 22, right: 22, left: 2, bottom: 8 }}>
                           <defs>
