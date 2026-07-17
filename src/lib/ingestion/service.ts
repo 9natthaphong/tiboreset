@@ -81,7 +81,8 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
     if (relevantEvidenceChanged) {
       const evidence = await dependencies.repository.loadForecastEvidence();
       const cutoff = now().toISOString();
-      const forecast = forecastFromEvidence(evidence, cutoff, dependencies.horizonHours ?? Number(process.env.FORECAST_HORIZON_HOURS ?? 36));
+      const context = await dependencies.repository.loadForecastContext?.();
+      const forecast = forecastFromEvidence(evidence, cutoff, dependencies.horizonHours ?? Number(process.env.FORECAST_HORIZON_HOURS ?? 36), undefined, undefined, context);
       forecastId = await dependencies.repository.saveForecast({ ...forecast, mode: "live" });
     }
     const latestId = newestPostId(uniquePosts, batch.newestId);
@@ -119,4 +120,3 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
 }
 
 export { MAX_X_POSTS_PER_RUN };
-

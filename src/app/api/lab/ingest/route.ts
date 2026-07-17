@@ -1,21 +1,12 @@
-import { timingSafeEqual } from "node:crypto";
 import { runConfiguredIngestion } from "@/lib/ingestion/configured";
+import { isAuthorizedLabMutation } from "@/lib/lab-auth";
 import { apiError } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
-function authorized(request: Request) {
-  const secret = process.env.ADMIN_SECRET;
-  const authorization = request.headers.get("authorization");
-  if (!secret || !authorization?.startsWith("Bearer ")) return false;
-  const supplied = Buffer.from(authorization.slice(7));
-  const expected = Buffer.from(secret);
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
-}
-
 export async function POST(request: Request) {
   if (process.env.NEXT_PUBLIC_APP_MODE !== "live") return apiError("LIVE_MODE_REQUIRED", "X ingestion is available only in Live Mode", 409);
-  if (!authorized(request)) return apiError("UNAUTHORIZED", "Admin authorization required", 401);
+  if (!isAuthorizedLabMutation(request)) return apiError("UNAUTHORIZED", "Admin authorization required", 401);
   try {
     return Response.json({ ok: true, data: await runConfiguredIngestion() }, { headers: { "Cache-Control": "no-store" } });
   } catch {

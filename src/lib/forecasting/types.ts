@@ -1,9 +1,19 @@
 export type EventType = "explicit_reset_confirmation"|"reset_hint"|"milestone_commitment"|"milestone_progress"|"usage_incident"|"capacity_signal"|"limit_policy_change"|"product_launch"|"promotion"|"community_poll"|"general_codex_update"|"irrelevant";
-export type Evidence = { id:string; postId:string; postedAt:string; excerpt:string; eventType:EventType; confidence:number; verified:boolean; url:string; effect:number; commitmentStrength?:number; milestoneCurrent?:number|null; milestoneTarget?:number|null; incidentStrength?:number; capacityConcern?:number; promotionalSignal?:number };
+export type EvidenceSourceType = "official_x"|"official_status"|"manual"|"demo_fixture"|"unknown";
+export type Evidence = { id:string; postId:string; postedAt:string; excerpt:string; eventType:EventType; confidence:number; verified:boolean; url:string; effect:number; sourceType?:EvidenceSourceType; commitmentStrength?:number; milestoneCurrent?:number|null; milestoneTarget?:number|null; incidentStrength?:number; capacityConcern?:number; promotionalSignal?:number };
 export type FeatureName = "explicit_reset_confirmation"|"explicit_reset_hint"|"public_commitment_strength"|"milestone_proximity"|"milestone_velocity"|"time_since_last_reset"|"recent_reset_suppression"|"usage_incident_strength"|"capacity_concern"|"promotional_signal"|"product_launch_signal"|"community_poll_signal"|"historical_analog_success_rate"|"historical_analog_similarity"|"signal_frequency_change"|"evidence_recency"|"source_reliability"|"unresolved_ambiguity_penalty";
 export type Features = Record<FeatureName,number>;
+export type FeatureOrigin = "measured"|"derived"|"expert_prior"|"unavailable";
+export type FeatureOrigins = Record<FeatureName,FeatureOrigin>;
+export type ForecastContext = {
+  verifiedResets: Array<{occurredAt:string;milestoneUsers?:number;verified:boolean}>;
+  milestoneObservations: Array<{occurredAt:string;milestoneUsers:number;verified:boolean}>;
+  historicalWindows: Array<{eventAt:string;verificationStatus:"verified"|"unverified"|"rejected";featureVector:Record<string,number>;resetFollowedWithinHorizon:boolean|null}>;
+  operationalSignals: Array<{occurredAt:string;verified:boolean;strength:number}>;
+  nextPledgedMilestoneUsers:number|null;
+};
 export type ModelConfig = { name:string; version:string; intercept:number; intervalsHours:number; coefficients:Record<FeatureName,{mean:number; uncertainty:number;label:string}> };
 export type HistogramBucket={from:number;to:number;count:number};
 export type SimulationSummary={mean:number;median:number;p10:number;p25:number;p75:number;p90:number;standardDeviation:number;histogram:HistogramBucket[];count:number;seed:number};
 export type Contribution={featureName:string;label:string;normalizedValue:number;coefficient:number;logOddsContribution:number};
-export type Forecast={id:string;generatedAt:string;horizonHours:number;probability:number;credibleIntervalLow:number;credibleIntervalHigh:number;predictedWindowStart:string;predictedWindowEnd:string;dataCutoff:string;features:Features;contributions:Contribution[];simulation:SimulationSummary;evidenceIds:string[];sourcePostIds:string[];modelVersion:string;configurationHash:string;mode:"demo"|"live"};
+export type Forecast={id:string;generatedAt:string;horizonHours:number;probability:number;credibleIntervalLow:number;credibleIntervalHigh:number;predictedWindowStart:string;predictedWindowEnd:string;dataCutoff:string;features:Features;featureOrigins:FeatureOrigins;featureDetails:Record<FeatureName,string>;contributions:Contribution[];simulation:SimulationSummary;evidenceIds:string[];sourcePostIds:string[];modelVersion:string;configurationHash:string;mode:"demo"|"live"};

@@ -6,8 +6,10 @@ import { z } from "zod";
 import demo from "@/data/demo.json";
 import { currentForecast, state } from "@/lib/demo-store";
 import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
-import type { Contribution, Evidence, EventType, Features, Forecast, SimulationSummary } from "@/lib/forecasting";
+import { defaultFeatureOrigin, type Contribution, type Evidence, type EventType, type FeatureName, type FeatureOrigins, type Features, type Forecast, type SimulationSummary } from "@/lib/forecasting";
 import { createDemoLatestPosts, parseLatestPostsLimit } from "@/lib/latest-posts";
+import { getEmailConfigurationStatus } from "@/lib/notifications/email-config";
+import { loadExternalContextEvents } from "@/lib/external-context";
 import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHistory } from "@/lib/historical-data";
 import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMode, PublicSnapshot, ResetHistoryItem } from "@/lib/public-data-types";
 
@@ -93,7 +95,7 @@ function mergeVerifiedResetHistory(primary: ResetHistoryItem[], seeded = histori
 
 function demoHealth(): PublicHealth {
   const forecast = currentForecast();
-  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt };
+  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt };
 }
 
 async function livePosts(client: SupabaseClient, limit: number): Promise<LatestPostsResponse> {
@@ -140,6 +142,23 @@ function labelForFeature(featureName: string): string {
   return MODEL_CONFIG.coefficients[featureName as keyof typeof MODEL_CONFIG.coefficients]?.label ?? featureName.replaceAll("_", " ");
 }
 
+function featureOriginsFromSimulation(features: Features, simulation: Record<string, unknown>): FeatureOrigins {
+  const stored = simulation.featureOrigins;
+  if (stored && typeof stored === "object") return Object.fromEntries((Object.keys(features) as FeatureName[]).map(name => {
+    const value = (stored as Record<string, unknown>)[name];
+    return [name, value === "measured" || value === "derived" || value === "expert_prior" || value === "unavailable" ? value : defaultFeatureOrigin(name)];
+  })) as FeatureOrigins;
+  return Object.fromEntries((Object.keys(features) as FeatureName[]).map(name => {
+    const inferred = defaultFeatureOrigin(name);
+    return [name, inferred === "derived" ? "unavailable" : inferred];
+  })) as FeatureOrigins;
+}
+
+function featureDetailsFromSimulation(features: Features, simulation: Record<string, unknown>) {
+  const stored = simulation.featureDetails;
+  return Object.fromEntries((Object.keys(features) as FeatureName[]).map(name => [name, stored && typeof stored === "object" && typeof (stored as Record<string, unknown>)[name] === "string" ? String((stored as Record<string, unknown>)[name]) : "Origin metadata predates this forecast snapshot."])) as Record<FeatureName, string>;
+}
+
 async function mapLiveForecast(client: SupabaseClient, raw: unknown): Promise<Forecast> {
   const row = forecastRowSchema.parse(raw);
   const [contributionResult, modelResult, eventResult] = await Promise.all([
@@ -153,12 +172,13 @@ async function mapLiveForecast(client: SupabaseClient, raw: unknown): Promise<Fo
   const modelVersion = typeof modelResult.data?.version === "string" ? modelResult.data.version : MODEL_CONFIG.version;
   const configurationHash = createHash("sha256").update(JSON.stringify(modelResult.data?.configuration ?? MODEL_CONFIG)).digest("hex").slice(0, 16);
   const generated = Date.parse(row.generated_at);
+  const features = row.feature_snapshot as Features;
   return {
     id: row.id, generatedAt: row.generated_at, horizonHours: row.horizon_hours, probability: row.probability,
     credibleIntervalLow: row.credible_interval_low, credibleIntervalHigh: row.credible_interval_high,
     predictedWindowStart: row.predicted_window_start ?? new Date(generated + row.horizon_hours * .35 * 36e5).toISOString(),
     predictedWindowEnd: row.predicted_window_end ?? new Date(generated + row.horizon_hours * 36e5).toISOString(),
-    dataCutoff: row.data_cutoff, features: row.feature_snapshot as Features, contributions,
+    dataCutoff: row.data_cutoff, features, featureOrigins: featureOriginsFromSimulation(features, row.simulation_summary), featureDetails: featureDetailsFromSimulation(features, row.simulation_summary), contributions,
     simulation: row.simulation_summary as unknown as SimulationSummary,
     evidenceIds: (eventResult.data ?? []).map(item => String(item.id)), sourcePostIds: row.evidence_post_ids,
     modelVersion, configurationHash, mode: "live",
@@ -185,7 +205,7 @@ async function liveEvidence(client: SupabaseClient, sourcePostIds: string[]): Pr
     const event = bySource.get(post.id);
     const payload = event?.event_payload ?? {};
     const impact = payload.forecastImpact ?? payload.forecast_impact ?? 0;
-    return { id: event?.id ?? `post-${post.id}`, postId: post.platform_post_id, postedAt: post.posted_at, excerpt: post.text, eventType: event?.event_type ?? "irrelevant", confidence: event?.extraction_confidence ?? 0, verified: event?.requires_review === false, url: post.post_url ?? `https://x.com/i/status/${post.platform_post_id}`, effect: typeof impact === "number" ? Math.round(impact) : 0 };
+    return { id: event?.id ?? `post-${post.id}`, postId: post.platform_post_id, postedAt: post.posted_at, excerpt: post.text, eventType: event?.event_type ?? "irrelevant", confidence: event?.extraction_confidence ?? 0, verified: event?.requires_review === false, sourceType: "official_x" as const, url: post.post_url ?? `https://x.com/i/status/${post.platform_post_id}`, effect: typeof impact === "number" ? Math.round(impact) : 0 };
   }).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
 }
 
@@ -219,12 +239,13 @@ export async function getPublicHealth(): Promise<PublicHealth> {
       client.from("ingestion_runs").select("completed_at").eq("status", "success").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (forecastResult.error || ingestionResult.error) throw new Error("health unavailable");
-    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", lastIngestionAt: ingestionResult.data?.completed_at ?? null, lastForecastAt: forecastResult.data?.generated_at ?? null };
-  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", lastIngestionAt: null, lastForecastAt: null }; }
+    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: ingestionResult.data?.completed_at ?? null, lastForecastAt: forecastResult.data?.generated_at ?? null };
+  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: null, lastForecastAt: null }; }
 }
 
 export async function getPublicSnapshot(): Promise<PublicSnapshot> {
   const historicalDataset = historicalDatasetSummary();
+  const externalContextEvents = loadExternalContextEvents().events;
   const client = configuredMode() === "live" ? serverClient() : null;
   if (client) {
     try {
@@ -232,10 +253,10 @@ export async function getPublicSnapshot(): Promise<PublicSnapshot> {
       const forecast = forecasts.at(-1)!;
       const evidence = await liveEvidence(client, forecast.sourcePostIds);
       const [latestPosts, resetHistory, health] = await Promise.all([livePosts(client, 20), liveResetHistory(client), getPublicHealth()]);
-      return { forecast, history: historyFromForecasts(forecasts, evidence), evidence, latestPosts, resetHistory: mergeVerifiedResetHistory(resetHistory), historicalDataset, health };
+      return { forecast, history: historyFromForecasts(forecasts, evidence), evidence, latestPosts, resetHistory: mergeVerifiedResetHistory(resetHistory), historicalDataset, externalContextEvents, health };
     } catch { /* Safe, clearly labelled Demo fallback below. */ }
   }
-  return { forecast: { ...currentForecast(), mode: "demo" }, history: demoHistory(), evidence: state().evidence, latestPosts: demoPosts(20), resetHistory: demoResetHistory(), historicalDataset, health: demoHealth() };
+  return { forecast: { ...currentForecast(), mode: "demo" }, history: demoHistory(), evidence: state().evidence, latestPosts: demoPosts(20), resetHistory: demoResetHistory(), historicalDataset, externalContextEvents, health: demoHealth() };
 }
 
 export async function getForecastHistory(): Promise<Forecast[]> {

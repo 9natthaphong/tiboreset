@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0.0",
+  "datasetVersion": "reviewed-external-context-2026-07-17",
+  "policy": "human-reviewed-official-sources-only",
+  "events": [
+    {
+      "id": "anthropic-claude-code-limits-2026-05-06",
+      "provider": "Anthropic",
+      "category": "competitor_limit_increase",
+      "title": "Claude Code five-hour limits doubled",
+      "occurredAt": "2026-05-06T00:00:00.000Z",
+      "sourceUrl": "https://www.anthropic.com/news/higher-limits-spacex",
+      "sourceType": "official_provider_announcement",
+      "verificationStatus": "reviewed",
+      "description": "Anthropic announced doubled Claude Code five-hour rate limits for Pro, Max, Team, and seat-based Enterprise plans.",
+      "forecastWeight": 0,
+      "rationale": "Context only; no calibrated causal relationship."
+    },
+    {
+      "id": "xai-grok-4-5-free-2026-07-08",
+      "provider": "SpaceXAI",
+      "category": "competitor_free_access",
+      "title": "Limited free Grok 4.5 access",
+      "occurredAt": "2026-07-08T00:00:00.000Z",
+      "sourceUrl": "https://x.ai/news/grok-4-5",
+      "sourceType": "official_provider_announcement",
+      "verificationStatus": "reviewed",
+      "description": "SpaceXAI announced limited free Grok 4.5 usage in Grok Build and Cursor.",
+      "forecastWeight": 0,
+      "rationale": "Context only; no calibrated causal relationship."
+    }
+  ]
+}

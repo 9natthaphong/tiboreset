@@ -1,1 +1,5 @@
-import{LabClient}from"./lab-client";export default function Lab(){return<LabClient/>}
+import { redirect } from "next/navigation";
+
+export default function Lab() {
+  redirect("/lab/data");
+}

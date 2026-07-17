@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { motion } from "motion/react";
 import { Bell, CheckCircle2, ChevronDown, Clock3, Database, ExternalLink, Eye, Mail, Menu, Radio, ShieldCheck, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
@@ -8,13 +9,14 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Evidence, Forecast } from "@/lib/forecasting";
+import type { ExternalContextEvent } from "@/lib/external-context";
 import type { HistoricalDatasetSummary, HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, ResetHistoryItem } from "@/lib/public-data-types";
 import { getUsageGuidance } from "@/lib/usage-guidance";
 import { CinematicHero } from "./cinematic-hero";
 
 const Charts = dynamic(() => import("./oracle-charts"), { ssr: false, loading: () => <div className="chart-loading">Loading forecast record…</div> });
 type Analog = { date: string; eventType: string; similarity: number; outcome: string; source: string; followed: boolean | null; forecastBefore?: number };
-type Props = { initialForecast: Forecast; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; historicalDataset: HistoricalDatasetSummary; health: PublicHealth; analogs: Analog[]; renderedAt: string };
+type Props = { initialForecast: Forecast; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; historicalDataset: HistoricalDatasetSummary; externalContextEvents: ExternalContextEvent[]; health: PublicHealth; analogs: Analog[]; renderedAt: string; emailAlertsConfigured: boolean };
 
 const formatTimestamp = (value: string) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value));
 const formatDate = (value: string) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(value));
@@ -34,7 +36,7 @@ const historyFromForecasts = (forecasts: Forecast[], evidence: Evidence[]): Hist
   return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: item?.excerpt, eventType: item?.eventType, evidencePostId: item?.postId, verified: item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect };
 });
 
-export function OracleExperience({ initialForecast, evidence: initialEvidence, history: initialHistory, latestPosts: initialPosts, resetHistory: initialResetHistory, historicalDataset, health: initialHealth, analogs, renderedAt }: Props) {
+export function OracleExperience({ initialForecast, evidence: initialEvidence, history: initialHistory, latestPosts: initialPosts, resetHistory: initialResetHistory, historicalDataset, externalContextEvents, health: initialHealth, analogs, renderedAt, emailAlertsConfigured }: Props) {
   const [forecast, setForecast] = useState(initialForecast);
   const [evidence, setEvidence] = useState(initialEvidence);
   const [history, setHistory] = useState(initialHistory);
@@ -45,10 +47,12 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
   const [showAllPosts, setShowAllPosts] = useState(false);
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [updated, setUpdated] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const realtimeConnected = useRef(false);
+  const refreshInFlight = useRef<Promise<boolean> | null>(null);
+  const refreshFailures = useRef(0);
+  const currentForecastId = useRef(initialForecast.id);
   const latestChecked = health.lastIngestionAt ?? posts.lastUpdatedAt ?? forecast.dataCutoff;
   const ageMinutes = Math.max(0, Math.floor((Date.parse(referenceTime) - Date.parse(latestChecked)) / 60000));
   const freshness = forecast.mode === "demo" ? "DEMO" : ageMinutes < 10 ? "LIVE" : ageMinutes <= 30 ? "DELAYED" : "STALE";
@@ -61,58 +65,80 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
     .filter(item => item.milestoneUsers && (forecast.mode === "demo" || item.historicalSource !== "demo"))
     .sort((a, b) => (b.milestoneUsers ?? 0) - (a.milestoneUsers ?? 0))[0];
   const latestKnownReset = latestMilestone
-    ? `${forecast.mode === "demo" ? "Demo · " : ""}${(latestMilestone.milestoneUsers ?? 0) / 1_000_000}M users`
+    ? `${forecast.mode === "demo" ? "Demo · " : ""}${(latestMilestone.milestoneUsers ?? 0) / 1_000_000}M combined active users`
     : historicalDataset.latestMilestoneLabel ?? "Not yet seeded";
 
-  const refreshPublicData = useCallback(async (announce = true) => {
-    try {
-      const [forecastJson, historyJson, evidenceJson, postsJson, resetJson, healthJson] = await Promise.all([
-        fetch("/api/forecast/current", { cache: "no-store" }).then(response => response.json()),
-        fetch("/api/forecast/history", { cache: "no-store" }).then(response => response.json()),
-        fetch("/api/evidence", { cache: "no-store" }).then(response => response.json()),
-        fetch("/api/posts/latest?limit=20", { cache: "no-store" }).then(response => response.json()),
-        fetch("/api/reset-history", { cache: "no-store" }).then(response => response.json()),
-        fetch("/api/health", { cache: "no-store" }).then(response => response.json()),
-      ]);
-      const nextForecast = forecastJson.data as Forecast;
-      const nextEvidence = evidenceJson.data as Evidence[];
-      setForecast(nextForecast);
-      setEvidence(nextEvidence);
-      setHistory(historyFromForecasts(historyJson.data as Forecast[], nextEvidence));
-      setPosts(postsJson as LatestPostsResponse);
-      setResetHistory(resetJson.data as ResetHistoryItem[]);
-      setHealth(healthJson as PublicHealth);
-      setReferenceTime(new Date().toISOString());
-      if (announce && nextForecast.id !== forecast.id) { setUpdated(true); window.setTimeout(() => setUpdated(false), 3500); }
-    } catch { /* Existing content remains readable if the network is unavailable. */ }
-  }, [forecast.id]);
+  const refreshPublicData = useCallback((announce = true) => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const refresh = (async () => {
+      try {
+        const responses = await Promise.all([
+          fetch("/api/forecast/current", { cache: "no-store" }),
+          fetch("/api/forecast/history", { cache: "no-store" }),
+          fetch("/api/evidence", { cache: "no-store" }),
+          fetch("/api/posts/latest?limit=20", { cache: "no-store" }),
+          fetch("/api/reset-history", { cache: "no-store" }),
+          fetch("/api/health", { cache: "no-store" }),
+        ]);
+        if (responses.some(response => !response.ok)) throw new Error("Public refresh unavailable");
+        const [forecastJson, historyJson, evidenceJson, postsJson, resetJson, healthJson] = await Promise.all(responses.map(response => response.json()));
+        const nextForecast = forecastJson.data as Forecast;
+        const nextEvidence = evidenceJson.data as Evidence[];
+        setForecast(nextForecast);
+        setEvidence(nextEvidence);
+        setHistory(historyFromForecasts(historyJson.data as Forecast[], nextEvidence));
+        setPosts(postsJson as LatestPostsResponse);
+        setResetHistory(resetJson.data as ResetHistoryItem[]);
+        setHealth(healthJson as PublicHealth);
+        setReferenceTime(new Date().toISOString());
+        refreshFailures.current = 0;
+        if (announce && nextForecast.id !== currentForecastId.current) {
+          setUpdated(true);
+          window.setTimeout(() => setUpdated(false), 3500);
+        }
+        currentForecastId.current = nextForecast.id;
+        return true;
+      } catch {
+        refreshFailures.current += 1;
+        return false;
+      } finally {
+        refreshInFlight.current = null;
+      }
+    })();
+    refreshInFlight.current = refresh;
+    return refresh;
+  }, []);
 
   useEffect(() => {
     const main = mainRef.current;
-    const refreshWhenVisible = () => { if (document.visibilityState === "visible") void refreshPublicData(false); };
-    const interval = window.setInterval(() => { if (!realtimeConnected.current && document.visibilityState === "visible") void refreshPublicData(); }, 30_000);
+    let pollTimer: number | undefined;
+    const scheduleFallback = () => {
+      if (pollTimer) window.clearTimeout(pollTimer);
+      const delay = 300_000 * 2 ** Math.min(refreshFailures.current, 3);
+      pollTimer = window.setTimeout(async () => {
+        if (!realtimeConnected.current && document.visibilityState === "visible") await refreshPublicData();
+        scheduleFallback();
+      }, delay);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshPublicData(false).finally(scheduleFallback);
+    };
     document.addEventListener("visibilitychange", refreshWhenVisible);
     window.addEventListener("focus", refreshWhenVisible);
     main?.setAttribute("data-refresh-ready", "true");
+    scheduleFallback();
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     let cleanupRealtime = () => {};
     if (forecast.mode === "live" && url && anon) {
       const client = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
-      const channel = client.channel("public-forecast-updates").on("postgres_changes", { event: "INSERT", schema: "public", table: "forecasts" }, () => void refreshPublicData()).subscribe(status => { realtimeConnected.current = status === "SUBSCRIBED"; });
+      const channel = client.channel("public-forecast-updates").on("postgres_changes", { event: "INSERT", schema: "public", table: "forecasts" }, () => void refreshPublicData().finally(scheduleFallback)).subscribe(status => { realtimeConnected.current = status === "SUBSCRIBED"; });
       cleanupRealtime = () => { realtimeConnected.current = false; void client.removeChannel(channel); };
     }
-    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", refreshWhenVisible); window.removeEventListener("focus", refreshWhenVisible); main?.setAttribute("data-refresh-ready", "false"); cleanupRealtime(); };
+    return () => { if (pollTimer) window.clearTimeout(pollTimer); document.removeEventListener("visibilitychange", refreshWhenVisible); window.removeEventListener("focus", refreshWhenVisible); main?.setAttribute("data-refresh-ready", "false"); cleanupRealtime(); };
   }, [forecast.mode, refreshPublicData]);
 
-  const inject = async () => {
-    setLoading(true);
-    await fetch("/api/lab/demo-event", { method: "POST" });
-    await refreshPublicData(false);
-    setUpdated(true);
-    window.setTimeout(() => setUpdated(false), 3500);
-    setLoading(false);
-  };
   const subscribe = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -160,26 +186,36 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
   }, []);
 
   return <main ref={mainRef} data-refresh-ready="false">
-    <header className="topbar sacred-nav" aria-hidden="true"><a className="wordmark" href="#top"><span>SF</span><b>SACRED FORECAST</b><small>RESET ORACLE</small></a><nav className="desktop-navigation" aria-label="Main navigation"><a href="#forecast">Forecast</a><a href="#latest-signals">Latest signals</a><a href="#reset-history">Reset history</a><a href="#method">Method</a><a href="/lab">Lab</a></nav><span className="mode-pill"><i/> {forecast.mode.toUpperCase()} MODE</span><details className="mobile-navigation"><summary aria-label="Open navigation"><Menu size={18}/><span>Menu</span><ChevronDown size={15}/></summary><nav aria-label="Mobile navigation"><a href="#forecast">Forecast</a><a href="#latest-signals">Latest signals</a><a href="#reset-history">Reset history</a><a href="#method">Method</a><a href="/lab">Lab</a></nav></details></header>
+    <header className="topbar sacred-nav" aria-hidden="true"><a className="wordmark" href="#top"><span>SF</span><b>SACRED FORECAST</b><small>RESET ORACLE</small></a><nav className="desktop-navigation" aria-label="Main navigation"><a href="#forecast">Forecast</a><a href="#latest-signals">Latest signals</a><a href="#reset-history">Reset history</a><a href="#method">Method</a><a href="/lab/data">Data Lab</a></nav><span className="mode-pill"><i/> {forecast.mode.toUpperCase()} MODE</span><details className="mobile-navigation"><summary aria-label="Open navigation"><Menu size={18}/><span>Menu</span><ChevronDown size={15}/></summary><nav aria-label="Mobile navigation"><a href="#forecast">Forecast</a><a href="#latest-signals">Latest signals</a><a href="#reset-history">Reset history</a><a href="#method">Method</a><a href="/lab/data">Data Lab</a></nav></details></header>
     {updated && <motion.div className="update-indicator" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} role="status"><Sparkles size={14}/> Forecast updated from new evidence</motion.div>}
 
-    <CinematicHero forecast={forecast} freshness={freshness} trend={trend} latestKnownReset={latestKnownReset} lastCheckedAt={latestChecked} loading={loading} onInject={inject}/>
+    <CinematicHero forecast={forecast} freshness={freshness} trend={trend} latestKnownReset={latestKnownReset} lastCheckedAt={latestChecked}/>
 
     <p className="post-hero-disclaimer">Unofficial forecast. Not affiliated with OpenAI or X.</p>
 
+    <section className="quota-plan-value section" data-editorial-section>
+      <header data-reveal-heading><p className="mono-label gold-label">MORE THAN A RESET PREDICTION.</p><h2>Turn uncertainty into a quota plan.</h2></header>
+      <div className="quota-plan-copy" data-reveal-primary><p>Sacred Forecast turns public signals, milestone history, and usage pressure into a practical quota plan for the next 36 hours.</p><p>This is not another token counter. It is a decision layer for when to run the work that matters.</p><a href="#forecast">PLAN MY NEXT 36 HOURS <span aria-hidden="true">→</span></a></div>
+      <div className="quota-plan-rules" data-reveal-support><p><b>Use now</b> when the window is stable.</p><p><b>Queue heavy work</b> when reset odds are rising.</p><p><b>Protect capacity</b> when the evidence is weak.</p></div>
+    </section>
+
     <section className="usage-planning" data-band={guidance.band} data-testid="usage-guidance" data-editorial-section><div data-reveal-heading><p className="mono-label gold-label">WHAT THIS MEANS FOR YOUR CODEX USAGE</p><h2>{guidance.title}</h2><p>{guidance.guidance}</p></div><aside data-reveal-primary><span>{currentProbability}%</span><b>{guidance.band}</b>{trend === "Rising" ? <TrendingUp/> : trend === "Falling" ? <TrendingDown/> : <Radio/>}</aside><small data-reveal-support>This is usage-planning guidance, not an official OpenAI announcement.</small></section>
 
-    <section id="signal" className="signal-bar" data-editorial-section><div data-reveal-heading><Mail/><span><b>GET THE RESET SIGNAL</b><small>Only meaningful reset alerts</small></span></div>{submitted ? <div className="signal-success" data-reveal-primary><ShieldCheck/><span><b>Check your inbox to confirm your alerts.</b><small>Demo delivery is in the Lab outbox.</small></span></div> : <form onSubmit={subscribe} data-reveal-primary><input name="email" type="email" placeholder="you@example.com" aria-label="Email address" required/><select name="threshold" defaultValue="70" aria-label="Forecast threshold"><option value="60">Forecast reaches 60%</option><option value="70">Forecast reaches 70% — recommended</option><option value="80">Forecast reaches 80%</option><option value="confirmed">Confirmed reset only</option></select><label className="check compact-consent"><input type="checkbox" required/> <span>I accept the notification and privacy notice.</span></label><button><Bell size={15}/> Notify me</button></form>}<p data-reveal-support>No spam · Double opt-in · Unsubscribe anytime · Unofficial experimental forecast</p></section>
+    <section id="signal" className="signal-bar" data-editorial-section><div data-reveal-heading><Mail/><span><b>GET THE RESET SIGNAL</b><small>Only meaningful reset alerts</small></span></div>{emailAlertsConfigured ? submitted ? <div className="signal-success" data-reveal-primary><ShieldCheck/><span><b>Check your inbox to confirm your alerts.</b><small>Your confirmation link is on its way.</small></span></div> : <form onSubmit={subscribe} data-reveal-primary><input name="email" type="email" placeholder="you@example.com" aria-label="Email address" required/><select name="threshold" defaultValue="70" aria-label="Forecast threshold"><option value="60">Forecast reaches 60%</option><option value="70">Forecast reaches 70% — recommended</option><option value="80">Forecast reaches 80%</option><option value="confirmed">Confirmed reset only</option></select><label className="check compact-consent"><input type="checkbox" required/> <span>I accept the notification and privacy notice.</span></label><button><Bell size={15}/> Notify me</button></form> : <div className="signal-unavailable" data-reveal-primary><span><b>Email alerts coming soon</b><small>Live delivery is not configured yet.</small></span></div>}<p data-reveal-support>{emailAlertsConfigured ? "No spam · Double opt-in · Unsubscribe anytime · Unofficial experimental forecast" : "The forecast remains available here while alert delivery is offline."}</p></section>
 
     <section id="forecast" className="section forecast-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label gold-label">THE FORECAST</p><h2>One answer. Three clear views.</h2></div><p>What changed, how certain it is, and what the model sees now.</p></header><div data-reveal-primary><Charts forecast={forecast} history={history} resetHistory={resetHistory}/></div></section>
 
     <section id="latest-signals" className="section latest-signals-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label cyan-label">LATEST SIGNALS FROM TIBO</p><h2>The posts moving the forecast.</h2></div><div className="source-status"><Radio size={14}/><span><b>{posts.mode === "live" ? "LIVE SOURCE" : "DEMO SOURCE"}</b><small>{posts.mode === "live" ? `Last checked ${relativeTime(posts.lastUpdatedAt, referenceTime)}` : "Synthetic fixtures for offline demonstration"}</small></span></div></header><p className="section-deck" data-reveal-primary>The newest public posts that may affect the reset forecast.</p><div className={`latest-signals-grid ${showAllPosts ? "show-all" : "compact"}`} data-reveal-support>{posts.posts.map(post => <LatestPostCard key={post.id} post={post} mode={posts.mode} expanded={expandedPosts.has(post.id)} onToggle={() => setExpandedPosts(current => { const next = new Set(current); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} now={referenceTime}/>)}</div>{posts.posts.length > 4 && <button className="view-all-signals" onClick={() => setShowAllPosts(value => !value)}>{showAllPosts ? "Show fewer signals" : "View all latest signals"} <ChevronDown size={16}/></button>}</section>
 
+    <MarketPressure events={externalContextEvents}/>
+
     <ResetHistory resetHistory={resetHistory} historicalDataset={historicalDataset} mode={forecast.mode}/>
 
-    <details className="research-archive"><summary><span className="archive-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="archive-open-copy">OPEN TECHNICAL DETAILS</b><b className="archive-close-copy">CLOSE TECHNICAL DETAILS</b><small>Historical analogs, Time Machine, methodology and audit export</small></span><ChevronDown/></summary><div className="archive-content"><HistoricalMemory analogs={analogs}/><TimeMachine history={history} evidence={evidence} modelVersion={forecast.modelVersion}/><Methodology forecast={forecast}/></div></details>
+    <HowForecastIsCalculated forecast={forecast}/>
 
-    <footer><span>SACRED FORECAST · RESET ORACLE</span><p>Plan before the tokens flow.</p><a href="/lab">OPEN THE LAB →</a></footer>
+    <details className="research-archive"><summary><span className="archive-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="archive-open-copy">OPEN TECHNICAL DETAILS</b><b className="archive-close-copy">CLOSE TECHNICAL DETAILS</b><small>Historical analogs, Time Machine, methodology and audit export</small></span><ChevronDown/></summary><div className="archive-content"><HistoricalMemory analogs={analogs}/><TimeMachine history={history} evidence={evidence} modelVersion={forecast.modelVersion}/><Methodology forecast={forecast}/><div className="full-data-lab-action"><p>Need the complete source and model record?</p><Link href="/lab/data">Open Full Data Lab <span aria-hidden="true">→</span></Link></div></div></details>
+
+    <footer><span>SACRED FORECAST · RESET ORACLE</span><p>Unofficial forecast. Not affiliated with OpenAI or X.</p><a href="/lab/data">OPEN DATA LAB →</a></footer>
   </main>;
 }
 
@@ -192,9 +228,17 @@ function ResetHistory({ resetHistory, historicalDataset, mode }: { resetHistory:
   return <section id="reset-history" className="section reset-history-section" data-editorial-section>
     <header className="concise-heading reset-history-heading" data-reveal-heading><div><p className="mono-label gold-label">RESET HISTORY</p><h2>The milestones that opened the gates.</h2></div><p>Verified announcements only. No retrospective probabilities are inferred.</p></header>
 
-    {latestMilestone && <div className="latest-verified-milestone" data-reveal-primary><span>LATEST VERIFIED MILESTONE</span><strong>{(latestMilestone.milestoneUsers ?? 0) / 1_000_000}M <small>ACTIVE USERS</small></strong><b>{latestMilestone.type === "scheduled" ? "RESET SCHEDULED" : `${latestMilestone.type.toUpperCase()} RESET ANNOUNCED`}</b><time dateTime={latestMilestone.displayDateThailand ?? latestMilestone.date}>{latestMilestone.displayDateThailand ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" }).format(new Date(`${latestMilestone.displayDateThailand}T00:00:00+07:00`)) : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(latestMilestone.date))}</time>{latestMilestone.sourceUrl && <a href={latestMilestone.sourceUrl} target="_blank" rel="noreferrer">View official post <ExternalLink size={14}/></a>}</div>}
+    {latestMilestone && <div className="latest-verified-milestone" data-reveal-primary>
+      <span>LATEST REPORTED COMBINED ACTIVE USERS</span>
+      <strong>{(latestMilestone.milestoneUsers ?? 0) / 1_000_000}M <small>CODEX + CHATGPT WORK</small></strong>
+      <b>{latestMilestone.type === "scheduled" ? "RESET SCHEDULED" : `${latestMilestone.type.toUpperCase()} RESET ANNOUNCED`}</b>
+      <time dateTime={latestMilestone.displayDateThailand ?? latestMilestone.date}>{latestMilestone.displayDateThailand ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" }).format(new Date(`${latestMilestone.displayDateThailand}T00:00:00+07:00`)) : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(latestMilestone.date))}</time>
+      <div className="next-milestone"><span>NEXT PLEDGED MILESTONE</span><b>10M</b><small>MILESTONE PROGRESS · 90%</small></div>
+      <p>The July 9M figure covers Codex and ChatGPT Work combined. The latest official Codex-only figure was 5M+ weekly users on June 2.</p>
+      {latestMilestone.sourceUrl && <a href={latestMilestone.sourceUrl} target="_blank" rel="noreferrer">View official post <ExternalLink size={14}/></a>}
+    </div>}
 
-    <div className="historical-provenance-row" aria-label="Historical dataset summary" data-reveal-support><span>HISTORICAL SEED · {historicalDataset.datasetVersion}</span><p><b>{historicalDataset.confirmedResets}</b> confirmed resets</p><p><b>{historicalDataset.verifiedSources}</b> verified sources</p><p><b>{historicalDataset.negativeWindows}</b> inferred negative windows</p><small><Database size={14}/> {sourceLabel}</small></div>
+    <div className="historical-provenance-row" aria-label="Historical dataset summary" data-reveal-support><span>HISTORICAL SEED · {historicalDataset.datasetVersion}</span><p><b>{historicalDataset.confirmedResets}</b> confirmed resets</p><p><b>{historicalDataset.verifiedSources}</b> verified sources</p><p><b>{historicalDataset.negativeWindows}</b> verified negative windows</p><small><Database size={14}/> {sourceLabel}</small></div>
 
     <div className="milestone-story" aria-label="Three million through nine million user milestone reset ledger" data-reveal-support><div className="milestone-progress-line" aria-hidden="true"/>
       {Array.from({ length: 7 }, (_, index) => (index + 3) * 1_000_000).map(milestoneUsers => {
@@ -224,6 +268,36 @@ function LatestPostCard({ post, mode, expanded, onToggle, now }: { post: LatestP
     <div className="signal-meta"><span>{Math.round(post.extractionConfidence * 100)}% extraction confidence</span><span className={post.verified ? "verified" : "ambiguous"}>{post.verified ? "Verified" : post.ambiguous ? "Ambiguity review" : "Unverified"}</span></div>
     <footer><span>{mode === "demo" ? "Synthetic fixture" : "Official X source"}</span><a className="source-action" href={post.url} target="_blank" rel="noreferrer">{mode === "demo" ? "Open demo evidence" : "View original post"} <ExternalLink size={13}/></a></footer>
   </article>;
+}
+
+function MarketPressure({ events }: { events: ExternalContextEvent[] }) {
+  const contextEvents = events.filter(event => event.category.startsWith("competitor_") && event.verificationStatus === "reviewed");
+  if (!contextEvents.length) return null;
+  return <section className="section market-pressure" data-editorial-section>
+    <header className="concise-heading" data-reveal-heading><div><p className="mono-label cyan-label">MARKET PRESSURE</p><h2>What competing coding agents are expanding.</h2></div><p>Reviewed official context. These records do not drive the forecast.</p></header>
+    <div className="market-pressure-grid" data-reveal-primary>{contextEvents.map(event => <article key={event.id}>
+      <header><span>{event.provider}</span><time dateTime={event.occurredAt}>{formatDate(event.occurredAt)}</time></header>
+      <h3>{event.title}</h3><p>{event.description}</p>
+      <footer><span>CONTEXT ONLY · WEIGHT {event.forecastWeight}</span><a href={event.sourceUrl} target="_blank" rel="noreferrer">Official source <ExternalLink size={13}/></a></footer>
+    </article>)}</div>
+    <p className="market-pressure-note" data-reveal-support>External competitor events have no calibrated causal relationship to a Codex reset and currently carry zero forecast weight.</p>
+  </section>;
+}
+
+function HowForecastIsCalculated({ forecast }: { forecast: Forecast }) {
+  const pipeline = ["PUBLIC SIGNALS", "STRUCTURED EVIDENCE", "FEATURE VECTOR", "SIX-HOUR LOGISTIC HAZARDS", `${forecast.simulation.count.toLocaleString()} MONTE CARLO SIMULATIONS`, `${forecast.horizonHours}-HOUR PROBABILITY RANGE`];
+  const categories = [
+    { origin: "MEASURED", items: ["Direct reset confirmation", "Reset wording", "Public commitment", "Usage incident", "Capacity concern", "Promotional language", "Product launch", "Community poll", "Evidence recency", "Ambiguity"] },
+    { origin: "DERIVED", items: ["Time since last reset", "Recent-reset suppression", "Milestone proximity", "Milestone velocity", "Signal frequency change", "Source reliability"] },
+    { origin: "EXPERT PRIOR", items: ["Coefficient means and uncertainty", "Intercept", "Values not yet supported by a calibrated historical dataset"] },
+  ];
+  return <section id="method" className="section model-explainer" data-editorial-section>
+    <header className="concise-heading" data-reveal-heading><div><p className="mono-label gold-label">HOW THE FORECAST IS CALCULATED</p><h2>An auditable model, not a trained oracle.</h2></div><p>Reset Oracle is an expert-prior hazard model, not a statistically trained prediction model.</p></header>
+    <p className="model-explainer-deck" data-reveal-primary>It converts verified public evidence into six-hour risk intervals, combines them over a {forecast.horizonHours}-hour horizon, and runs {forecast.simulation.count.toLocaleString()} seeded simulations to estimate uncertainty.</p>
+    <ol className="forecast-pipeline" aria-label="Forecast calculation pipeline" data-reveal-support>{pipeline.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span><b>{step}</b>{index < pipeline.length - 1 && <i aria-hidden="true">→</i>}</li>)}</ol>
+    <div className="feature-origin-groups" data-reveal-support>{categories.map(category => <article key={category.origin}><h3>{category.origin}</h3><ul>{category.items.map(item => <li key={item}>{item}</li>)}</ul></article>)}</div>
+    <footer className="model-explainer-record" data-reveal-support><span>MODEL {forecast.modelVersion}</span><span>DATA CUTOFF {formatTimestamp(forecast.dataCutoff)} UTC</span><Link href="/lab/data">Inspect the full technical record <span aria-hidden="true">→</span></Link></footer>
+  </section>;
 }
 
 function HistoricalMemory({ analogs }: { analogs: Analog[] }) {

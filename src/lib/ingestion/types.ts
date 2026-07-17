@@ -1,5 +1,5 @@
 import type { Extraction } from "@/lib/extraction/schema";
-import type { Forecast } from "@/lib/forecasting";
+import type { Forecast, ForecastContext } from "@/lib/forecasting";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
 
 export type StoredAccount = SocialAccount & { databaseId: string; latestProcessedPostId?: string };
@@ -38,6 +38,7 @@ export interface IngestionRepository {
   insertPost(input: { account: StoredAccount; post: SocialPost; localScreen: Extraction }): Promise<StoredPost>;
   insertExtraction(input: { post: StoredPost; result: ExtractionResult; forecastImpact: number }): Promise<StoredExtraction>;
   loadForecastEvidence(): Promise<import("@/lib/forecasting").Evidence[]>;
+  loadForecastContext?(): Promise<ForecastContext>;
   saveForecast(forecast: Forecast): Promise<string>;
   updateLatestProcessedPostId(accountId: string, platformPostId: string, updatedAt: string): Promise<void>;
 }

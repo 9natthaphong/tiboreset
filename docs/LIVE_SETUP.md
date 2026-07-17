@@ -1,14 +1,31 @@
 # Live setup
 
-1. Create a Supabase project, enable pgvector/pg_cron/pg_net, and apply all SQL files under `supabase/migrations`.
-2. Create an X developer app with read access. Set `X_BEARER_TOKEN` and `X_USERNAME`. The first successful run resolves the user ID once and reads at most the latest 10 posts. Every later run uses the stored `latest_processed_post_id` as `since_id`. Do not use ingestion to backfill history.
-3. Set `OPENAI_API_KEY` and `OPENAI_MODEL=gpt-5.6`. Use the Responses API with the strict extraction schema in `src/lib/extraction/schema.ts`; never ask extraction to output probability.
-4. In Resend, verify the sending domain, set `RESEND_API_KEY`, `EMAIL_FROM`, and optional `EMAIL_REPLY_TO`. Configure the webhook URL as `/api/webhooks/resend` and set its signing secret.
-5. Set `CRON_SECRET` and replace the placeholders in `003_pg_cron.sql` with the deployed HTTPS URL and a Vault-backed secret.
-6. Set `NEXT_PUBLIC_APP_MODE=live` only after server-side credentials exist. Never prefix secrets with `NEXT_PUBLIC_`.
+## Core services
 
-Verify the deployment with `GET /api/health`. A ready Live Mode response reports `database: "connected"`; `xSource` reports `configured` only when the X bearer token is present. The endpoint intentionally omits URLs, keys, and raw errors. `GET /api/posts/latest?limit=6` reads approved stored posts for the configured account and caches Live responses briefly.
+1. Create a Supabase project, enable `vector`, `pg_cron`, and `pg_net`, then apply every SQL file under `supabase/migrations` in order.
+2. Create an X developer app with read access. Set `X_BEARER_TOKEN` and `X_USERNAME`. The first successful run resolves the user ID once and reads at most the latest 10 posts. Every later run uses `latest_processed_post_id` as `since_id`. Do not use ingestion to backfill history.
+3. Set `OPENAI_API_KEY` and `OPENAI_MODEL=gpt-5.6`. Extraction uses the Responses API and the strict schema in `src/lib/extraction/schema.ts`; extraction never outputs probability.
+4. Set strong, independent `CRON_SECRET` and `ADMIN_SECRET` values. Replace the deployment placeholders in `003_pg_cron.sql` with the deployed HTTPS URL and a Vault-backed cron secret.
+5. Keep `CONTROL_ROOM_ENABLED=false` in Production unless an operator explicitly needs the hidden `/control-room` surface. Enabling the route does not bypass `ADMIN_SECRET` on mutating actions.
+6. Set `NEXT_PUBLIC_APP_MODE=live` only after the server credentials are ready. Never prefix a secret with `NEXT_PUBLIC_`.
 
-Supply reviewed history separately through the three `src/data/*` seed files, then run `npm run seed:history`. These files are human-owned inputs and must never be generated or rewritten by an LLM. Review `/lab/data` after import. On Windows networks with a private TLS inspection root, run Node with `NODE_OPTIONS=--use-system-ca`; do not disable TLS verification.
+Verify the deployment with `GET /api/health`. It returns only safe state: database, X, OpenAI, email, and latest activity status. It never returns URLs, keys, provider errors, or authorization values.
 
-Confirmed opt-in links expire after `EMAIL_CONFIRMATION_EXPIRY_HOURS` (24 by default). Threshold alerts rearm only after probability is ten points below the selected threshold. Complaints permanently suppress future delivery; bounces should be reviewed before reactivation.
+Supply reviewed history separately through the three version-controlled `src/data/*` seed files, then run `npm run seed:history`. These files are human-owned and must never be generated or rewritten by an LLM. Review the read-only record at `/lab/data`. On Windows networks with a private TLS inspection root, use `NODE_OPTIONS=--use-system-ca`; never disable TLS verification.
+
+## Resend production setup
+
+1. Verify a Resend sending subdomain.
+2. Create a Sending-access API key.
+3. Set `RESEND_API_KEY` and set `EMAIL_FROM` to an address on the verified subdomain.
+4. Set `EMAIL_REPLY_TO` to a real monitored inbox.
+5. Deploy the application.
+6. Create the Production webhook at `https://DEPLOYED_DOMAIN/api/webhooks/resend`.
+7. Subscribe the webhook to `email.delivered`, `email.bounced`, and `email.complained` events.
+8. Copy the webhook signing secret into `RESEND_WEBHOOK_SECRET`.
+9. Redeploy so the signing secret and complete email configuration are active.
+10. Send one confirmation email, follow the double-opt-in link, and verify that the delivery webhook updates the stored delivery record.
+
+Confirmation links expire after `EMAIL_CONFIRMATION_EXPIRY_HOURS` (24 by default). Threshold alerts rearm only after probability falls ten points below the selected threshold. Complaints suppress all future delivery. Bounces are recorded and the subscription is held for review.
+
+The Resend Free plan is expected to allow 3,000 transactional emails per month and 100 per day. Each recipient counts as one email, and both confirmation and alert emails consume quota. These expectations are documented for operator planning only and are not hardcoded into application behavior.

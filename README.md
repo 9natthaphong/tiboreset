@@ -9,11 +9,11 @@ npm install
 npm run dev:demo
 ```
 
-Open `http://localhost:3000`. No credentials are required. Every synthetic item is labeled Demo Data. Subscribe, then open `/lab` to simulate confirmation, a 70% crossing, deduplication, confirmed reset, and local email previews.
+Open `http://localhost:3000`. No credentials are required. Every synthetic item is labeled Demo Data. `npm run dev:demo` enables the local `/control-room` route so the confirmation, 70% crossing, deduplication, confirmed-reset, and Demo Outbox flows remain available. `/lab` redirects to the public read-only Data Lab.
 
 ## Live Mode
 
-Copy `.env.example` to `.env.local`, set `NEXT_PUBLIC_APP_MODE=live`, then add X, Supabase, OpenAI, and Resend credentials. Missing optional credentials never crash startup; email falls back to the Demo Outbox. Apply `supabase/migrations` in order. See [Live Setup](docs/LIVE_SETUP.md).
+Copy `.env.example` to `.env.local`, set `NEXT_PUBLIC_APP_MODE=live`, then add X, Supabase, OpenAI, and Resend credentials. Missing optional credentials never crash startup; the public email form stays disabled unless the complete delivery and webhook configuration is present. Apply `supabase/migrations` in order. See [Live Setup](docs/LIVE_SETUP.md).
 
 ## Commands
 
@@ -24,14 +24,14 @@ Copy `.env.example` to `.env.local`, set `NEXT_PUBLIC_APP_MODE=live`, then add X
 - Official X API v2 adapters only; no scraping.
 - Live activation resolves the monitored account once, reads at most 10 current posts, then advances only with `since_id`. It never backfills the account timeline.
 - Human-reviewed history lives in `src/data/source-manifest.json`, `verified-reset-ledger.json`, and `historical-signal-windows.json`. Strict schemas reject extra fields and broken provenance references; `npm run seed:history` performs stable UUID upserts.
-- `/lab/data` exposes dataset counts, feature vectors, blind-backtest rows, data cutoffs, and X resource audits without exposing subscriber or credential data.
+- `/lab/data` is a public, read-only technical record covering data sources, feature origins, forecast inputs, historical windows, context events, blind-backtest rows, data cutoffs, and X resource audits. `/control-room` does not exist unless `CONTROL_ROOM_ENABLED=true`, and its Live mutations still require `ADMIN_SECRET`.
 - The public homepage reads one reconciled forecast snapshot for the hero, trend, contributions, range, usage guidance, and evidence annotations.
 - `GET /api/posts/latest?limit=6` returns safe stored post fields (maximum 20) and falls back to clearly labelled Demo Posts when Live Mode is unavailable.
 - `GET /api/health` exposes only safe connection state, source configuration, and last-run timestamps; it never returns credentials or internal errors.
 - OpenAI Responses API/strict extraction is designed as a replaceable extractor. Demo Mode uses a visibly labeled deterministic heuristic.
 - Supabase RLS exposes approved public forecast data only. The service role stays server-side.
-- Live clients subscribe to inserted forecast rows with the anon key. If Realtime is unavailable, visible tabs refresh public forecast/post data every 30 seconds and refresh immediately on focus.
-- Resend is enabled only with `RESEND_API_KEY` and `EMAIL_FROM`.
+- Live clients subscribe to inserted forecast rows with the anon key. If Realtime is unavailable, visible tabs refresh public forecast/post data every five minutes, refresh on focus, back off after errors, and never overlap refreshes.
+- Resend is enabled only when its API key, sender, reply-to address, and webhook signing secret form a complete configuration. Signed webhook receipts are replay-protected and update delivery/subscription state.
 - Tokens are random, stored as SHA-256 hashes, and confirmation expires.
 - Expert-prior coefficients are not claimed as trained. Synthetic backtests do not establish accuracy.
 

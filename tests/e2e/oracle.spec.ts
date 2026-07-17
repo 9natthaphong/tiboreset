@@ -180,12 +180,12 @@ test("email demo lifecycle", async ({ page }) => {
   await page.locator(".check input").first().check();
   await page.getByRole("button", { name: "Notify me" }).click();
   await expect(page.getByText(/Check your inbox/)).toBeVisible();
-  await page.goto("/lab", { waitUntil: "domcontentloaded" });
+  await page.goto("/control-room", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Simulate confirmation" }).click();
   await expect(page.getByRole("status")).toContainText("Completed simulate-confirmation");
   await page.getByRole("button", { name: "Simulate forecast crossing 70%" }).click();
   await expect(page.getByRole("status")).toContainText("Completed demo-event");
-  await page.getByRole("button", { name: "Run evaluation again" }).click();
+  await page.getByRole("button", { name: "Run notification evaluation" }).click();
   await expect(page.getByRole("status")).toContainText("Completed evaluate");
   await expect(page.getByText("Codex reset probability just crossed 70%")).toHaveCount(1);
   await page.getByRole("button", { name: "Simulate confirmed reset" }).click();

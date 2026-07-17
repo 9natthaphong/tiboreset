@@ -1,4 +1,5 @@
 import type { EventType, Evidence, Forecast } from "@/lib/forecasting";
+import type { ExternalContextEvent } from "@/lib/external-context";
 
 export type PublicMode = "demo" | "live";
 
@@ -73,6 +74,7 @@ export type PublicHealth = {
   database: "connected" | "unavailable";
   xSource: "configured" | "unavailable";
   openAI: "configured" | "unavailable";
+  email: "disabled" | "configured" | "configuration_error";
   lastIngestionAt: string | null;
   lastForecastAt: string | null;
 };
@@ -84,5 +86,6 @@ export type PublicSnapshot = {
   latestPosts: LatestPostsResponse;
   resetHistory: ResetHistoryItem[];
   historicalDataset: HistoricalDatasetSummary;
+  externalContextEvents: ExternalContextEvent[];
   health: PublicHealth;
 };

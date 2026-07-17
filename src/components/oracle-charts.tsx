@@ -167,7 +167,10 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
             {selected && <p className="signal-explanation">{item.explanation}</p>}
           </div>;
         })}</div>
-        <details className="calculation-drawer"><summary><span><b>VIEW CALCULATION</b><small>Technical feature names and configured values</small></span><ChevronDown size={17}/></summary><div>{forecast.contributions.map(item => <dl key={item.featureName}><dt>{contributionLabels[item.featureName] ?? item.label}</dt><dd><code>{item.featureName}</code><span>value {item.normalizedValue.toFixed(2)}</span><span>coefficient {item.coefficient.toFixed(2)}</span><b>{item.logOddsContribution.toFixed(3)}</b></dd></dl>)}</div></details>
+        <details className="calculation-drawer"><summary><span><b>VIEW CALCULATION</b><small>Technical feature names, origins and configured values</small></span><ChevronDown size={17}/></summary><div>{forecast.contributions.map(item => {
+          const featureName = item.featureName as keyof typeof forecast.featureOrigins;
+          return <dl key={item.featureName}><dt>{contributionLabels[item.featureName] ?? item.label}<small>{forecast.featureDetails[featureName]}</small></dt><dd><code>{item.featureName}</code><span className={`feature-origin origin-${forecast.featureOrigins[featureName]}`}>{forecast.featureOrigins[featureName]}</span><span>value {item.normalizedValue.toFixed(2)}</span><span>coefficient {item.coefficient.toFixed(2)} · expert prior</span><b>{item.logOddsContribution.toFixed(3)}</b></dd></dl>;
+        })}</div></details>
       </section>}
 
       {view === "range" && <section id="forecast-panel-range" role="tabpanel" aria-labelledby="forecast-tab-range" className="forecast-view-panel range-view" data-testid="forecast-range">
@@ -183,7 +186,7 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
       </section>}
     </div>
 
-    <details className="advanced-diagnostics" id="method" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)}>
+    <details className="advanced-diagnostics" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)}>
       <summary><span className="diagnostic-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="diagnostic-open-copy">OPEN ADVANCED DIAGNOSTICS</b><b className="diagnostic-close-copy">CLOSE ADVANCED DIAGNOSTICS</b><small>Histogram, calibration, coefficients and audit details</small></span><ChevronDown size={18}/></summary>
       {diagnosticsOpen && <AdvancedDiagnostics forecast={forecast}/>} 
     </details>

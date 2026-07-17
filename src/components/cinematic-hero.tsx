@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, Mail, Sparkles } from "lucide-react";
+import { ArrowDown, Mail } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { Forecast } from "@/lib/forecasting";
@@ -12,8 +12,6 @@ type Props = {
   trend: "Rising" | "Falling" | "Steady";
   latestKnownReset: string;
   lastCheckedAt: string;
-  loading: boolean;
-  onInject: () => Promise<void>;
 };
 
 type FrameVideo = HTMLVideoElement & {
@@ -32,7 +30,7 @@ const VIDEO_START_PROGRESS = 0.15;
 const VIDEO_END_PROGRESS = 0.78;
 const TOPBAR_REVEAL_PROGRESS = 0.29;
 
-export function CinematicHero({ forecast, freshness, trend, latestKnownReset, lastCheckedAt, loading, onInject }: Props) {
+export function CinematicHero({ forecast, freshness, trend, latestKnownReset, lastCheckedAt }: Props) {
   const root = useRef<HTMLElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
@@ -89,7 +87,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
 
       gsap.set(media, { scale: 1.015, filter: "brightness(.38) saturate(.68)" });
       gsap.set(title, { autoAlpha: 1, y: 0, scale: 1 });
-      gsap.set(probability, { autoAlpha: 0.76, y: 12, scale: 0.985 });
+      gsap.set(probability, { autoAlpha: 0, y: 28, scale: 0.985, filter: "blur(8px)" });
       gsap.set([support, payoff], { autoAlpha: 0, y: 24 });
       gsap.set(atmosphere, { autoAlpha: 0.08, scale: 0.86 });
       gsap.set(foreground, { autoAlpha: 0.72, yPercent: 0 });
@@ -103,11 +101,10 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
       master = gsap.timeline({ paused: true, defaults: { ease: "none" } });
       master
         .to(title, { y: -8, duration: 0.15 }, 0)
-        .to(probability, { autoAlpha: 0.92, y: 4, duration: 0.16 }, 0.15)
         .to(media, { scale: 1.032, filter: "brightness(.52) saturate(.78)", duration: 0.30 }, 0.15)
         .to(scrollCue, { autoAlpha: 0, y: 10, duration: 0.12 }, 0.18)
         .to(title, { autoAlpha: 0.64, y: -24, scale: 0.98, duration: 0.20 }, 0.30)
-        .to(probability, { autoAlpha: 1, y: 0, scale: 1.04, duration: 0.28 }, 0.36)
+        .to(probability, { autoAlpha: 1, y: 0, scale: 1.04, filter: "blur(0px)", duration: 0.17 }, 0.38)
         .to(media, { scale: 1.052, filter: "brightness(.78) saturate(.96)", duration: 0.33 }, 0.45)
         .to(atmosphere, { autoAlpha: 0.72, scale: 1.08, duration: 0.30 }, 0.46)
         .to(support, { autoAlpha: 1, y: 0, duration: 0.20 }, 0.54)
@@ -329,7 +326,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
       <div className="hero-story">
         <div className="hero-story-title">
           <h1 aria-label="WILL TIBO RESET?"><span>WILL TIBO</span><em>RESET?</em></h1>
-          <p className="hero-premise">Plan your Codex usage before the tokens flow again.</p>
+          <p className="hero-premise">Know when to spend, save, or queue your Codex work.</p>
         </div>
         <div className="hero-story-probability">
           <strong data-testid="hero-probability">{percentage(forecast.probability)}<small>%</small></strong>
@@ -343,7 +340,6 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
         </dl>
         <div className="hero-story-payoff">
           <a href="#signal"><Mail size={16}/> Get the reset signal</a>
-          {forecast.mode === "demo" && <button onClick={onInject} disabled={loading}><Sparkles size={15}/>{loading ? "Recalculating…" : "Inject demo signal"}</button>}
           <span>{forecast.mode === "demo" ? "Demo mode" : `${freshness} · Live mode`}</span>
         </div>
       </div>

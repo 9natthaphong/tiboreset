@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { loadHistoricalDatasets } from "@/lib/historical-data";
+import { loadExternalContextEvents, ReviewedOpenAIStatusAdapter } from "@/lib/external-context";
 import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
 import { getServiceSupabase, isServiceSupabaseConfigured } from "@/lib/supabase/server";
 
@@ -11,11 +12,13 @@ const postDetailSchema = z.object({ id: z.string(), platform_post_id: z.string()
 
 export async function getDataLabSnapshot() {
   const datasets = loadHistoricalDatasets();
+  const externalContext = loadExternalContextEvents();
+  const operationalEvents = new ReviewedOpenAIStatusAdapter(externalContext).load();
   const verified = datasets.ledger.records.filter(record => record.verificationStatus === "verified").length;
   const positive = datasets.windows.windows.filter(window => window.observationWindow === "positive").length;
   const seed = {
     version: datasets.ledger.datasetVersion,
-    sources: datasets.manifest.sources.length,
+    sourceCount: datasets.manifest.sources.length,
     resetRecords: datasets.ledger.records.length,
     verified,
     unverified: datasets.ledger.records.length - verified,
@@ -24,8 +27,11 @@ export async function getDataLabSnapshot() {
     negative: datasets.windows.windows.length - positive,
     retrospectiveScoringAvailable: datasets.windows.windows.some(window => window.forecastBefore != null && window.resetFollowedWithinHorizon != null),
     windows: datasets.windows.windows,
+    sources: datasets.manifest.sources,
+    resetLedger: datasets.ledger.records,
   };
-  if (!isServiceSupabaseConfigured()) return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [] };
+  const context = { externalContext: externalContext.events, operationalEvents, nextPledgedMilestoneUsers: 10_000_000 };
+  if (!isServiceSupabaseConfigured()) return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
   try {
     const client = getServiceSupabase();
     const [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails] = await Promise.all([
@@ -52,8 +58,9 @@ export async function getDataLabSnapshot() {
       backtests: z.array(backtestSchema).parse(backtests.data ?? []),
       ingestionRuns: z.array(runSchema).parse(runs.data ?? []),
       extractedEvents,
+      ...context,
     };
   } catch {
-    return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [] };
+    return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
   }
 }

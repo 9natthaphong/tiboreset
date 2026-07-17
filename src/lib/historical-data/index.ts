@@ -156,6 +156,7 @@ export function historicalEvidenceAtCutoff(cutoff: string, datasets = loadHistor
       eventType: (knownEventTypes.has(window.eventCategory) ? window.eventCategory : "general_codex_update") as import("@/lib/forecasting").EventType,
       confidence: 1,
       verified: true,
+      sourceType: "official_x" as const,
       url: window.sourceUrl,
       effect: window.forecastBefore != null && window.forecastAfter != null ? Math.round((window.forecastAfter - window.forecastBefore) * 100) : 0,
     }));

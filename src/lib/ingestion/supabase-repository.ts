@@ -3,8 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Extraction } from "@/lib/extraction/schema";
 import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
-import type { Evidence, Forecast } from "@/lib/forecasting";
-import type { KnownResetSeedRow, HistoricalSeedRepository } from "@/lib/historical-data";
+import type { Evidence, Forecast, ForecastContext } from "@/lib/forecasting";
+import { extractMilestoneUsers, type KnownResetSeedRow, type HistoricalSeedRepository } from "@/lib/historical-data";
+import { versionedForecastContext } from "@/lib/forecast-context";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import type { ExtractionResult, IngestionReport, IngestionRepository, StoredAccount, StoredExtraction, StoredPost } from "./types";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
@@ -168,6 +169,7 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
         eventType: event.event_type as Evidence["eventType"],
         confidence: event.extraction_confidence,
         verified: event.requires_review === false,
+        sourceType: "official_x",
         url: post.post_url ?? `https://x.com/i/status/${post.platform_post_id}`,
         effect: numberOr("forecastImpact"),
         commitmentStrength: numberOr("commitment_strength"),
@@ -178,6 +180,25 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
         promotionalSignal: numberOr("promotional_signal"),
       } satisfies Evidence];
     });
+  }
+
+  async loadForecastContext(): Promise<ForecastContext> {
+    const cutoff = new Date().toISOString();
+    const base = versionedForecastContext(cutoff);
+    const result = await this.client.from("known_reset_events").select("occurred_at,reset_type,reason_category,description,verified").eq("verified", true).lte("occurred_at", cutoff).order("occurred_at", { ascending: true });
+    throwOnError(result.error, "Unable to load verified reset context");
+    return {
+      ...base,
+      verifiedResets: (result.data ?? []).filter(row => row.reset_type !== "scheduled").map(row => {
+        const occurredAt = String(row.occurred_at);
+        const canonical = base.verifiedResets.find(reset => Date.parse(reset.occurredAt) === Date.parse(occurredAt));
+        return {
+          occurredAt,
+          milestoneUsers: extractMilestoneUsers(typeof row.reason_category === "string" ? row.reason_category : undefined, typeof row.description === "string" ? row.description : undefined) ?? canonical?.milestoneUsers,
+          verified: row.verified === true,
+        };
+      }),
+    };
   }
 
   async saveForecast(forecast: Forecast): Promise<string> {
@@ -194,7 +215,7 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
       predicted_window_end: forecast.predictedWindowEnd,
       data_cutoff: forecast.dataCutoff,
       feature_snapshot: forecast.features,
-      simulation_summary: { ...forecast.simulation, configurationHash: forecast.configurationHash },
+      simulation_summary: { ...forecast.simulation, configurationHash: forecast.configurationHash, featureOrigins: forecast.featureOrigins, featureDetails: forecast.featureDetails },
       evidence_post_ids: forecast.sourcePostIds,
       mode: "live",
     }).select("id").single();

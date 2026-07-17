@@ -1,1 +1,16 @@
-import{manualPostInput,apiError}from"@/lib/validation";import{localExtract}from"@/lib/extraction/local";import{state,currentForecast}from"@/lib/demo-store";import{forecastFromEvidence}from"@/lib/forecasting";export async function POST(req:Request){const p=manualPostInput.safeParse(await req.json().catch(()=>null));if(!p.success)return apiError("INVALID_INPUT","Invalid manual post");const x=localExtract(p.data.text),e={id:crypto.randomUUID(),postId:`manual-${Date.now()}`,postedAt:new Date().toISOString(),excerpt:p.data.text,eventType:x.event_type,confidence:x.extraction_confidence,verified:false,url:p.data.url??"manual://post",effect:0,commitmentStrength:x.commitment_strength,milestoneCurrent:x.milestone_current,milestoneTarget:x.milestone_target};state().evidence.push(e);if(x.is_relevant)state().forecasts.push(forecastFromEvidence(state().evidence,new Date().toISOString()));return Response.json({ok:true,data:{extraction:x,forecast:currentForecast()}})}
+import { localExtract } from "@/lib/extraction/local";
+import { forecastFromEvidence } from "@/lib/forecasting";
+import { currentForecast, state } from "@/lib/demo-store";
+import { isAuthorizedLabMutation } from "@/lib/lab-auth";
+import { apiError, manualPostInput } from "@/lib/validation";
+
+export async function POST(request: Request) {
+  if (!isAuthorizedLabMutation(request)) return apiError("UNAUTHORIZED", "Admin authorization required", 401);
+  const parsed = manualPostInput.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return apiError("INVALID_INPUT", "Invalid manual post");
+  const extraction = localExtract(parsed.data.text);
+  const evidence = { id: crypto.randomUUID(), postId: `manual-${Date.now()}`, postedAt: new Date().toISOString(), excerpt: parsed.data.text, eventType: extraction.event_type, confidence: extraction.extraction_confidence, verified: false, url: parsed.data.url ?? "manual://post", effect: 0, commitmentStrength: extraction.commitment_strength, milestoneCurrent: extraction.milestone_current, milestoneTarget: extraction.milestone_target };
+  state().evidence.push(evidence);
+  if (extraction.is_relevant) state().forecasts.push(forecastFromEvidence(state().evidence, new Date().toISOString()));
+  return Response.json({ ok: true, data: { extraction, forecast: currentForecast() } });
+}
