@@ -7,7 +7,7 @@ export type FeatureOrigin = "measured"|"derived"|"expert_prior"|"unavailable";
 export type FeatureOrigins = Record<FeatureName,FeatureOrigin>;
 export type ForecastContext = {
   verifiedResets: Array<{occurredAt:string;milestoneUsers?:number;verified:boolean}>;
-  milestoneObservations: Array<{occurredAt:string;milestoneUsers:number;verified:boolean}>;
+  milestoneObservations: Array<{occurredAt:string;milestoneUsers:number;verified:boolean;resetType?:"full"|"banked"|"scheduled"|"announcement_only"}>;
   historicalWindows: Array<{eventAt:string;verificationStatus:"verified"|"unverified"|"rejected";featureVector:Record<string,number>;resetFollowedWithinHorizon:boolean|null}>;
   operationalSignals: Array<{occurredAt:string;verified:boolean;strength:number}>;
   nextPledgedMilestoneUsers:number|null;
@@ -16,4 +16,5 @@ export type ModelConfig = { name:string; version:string; intercept:number; inter
 export type HistogramBucket={from:number;to:number;count:number};
 export type SimulationSummary={mean:number;median:number;p10:number;p25:number;p75:number;p90:number;standardDeviation:number;histogram:HistogramBucket[];count:number;seed:number};
 export type Contribution={featureName:string;label:string;normalizedValue:number;coefficient:number;logOddsContribution:number};
-export type Forecast={id:string;generatedAt:string;horizonHours:number;probability:number;credibleIntervalLow:number;credibleIntervalHigh:number;predictedWindowStart:string;predictedWindowEnd:string;dataCutoff:string;features:Features;featureOrigins:FeatureOrigins;featureDetails:Record<FeatureName,string>;contributions:Contribution[];simulation:SimulationSummary;evidenceIds:string[];sourcePostIds:string[];modelVersion:string;configurationHash:string;mode:"demo"|"live"};
+export type PolicyModelRecord={policyProbability:number;discretionaryProbability:number;nextTargetUsers:number|null;latestMilestoneUsers:number|null;policyStatus:"active"|"fulfilled"|"unavailable";recentIntervalMedianHours:number|null;longTermIntervalMedianHours:number|null;regimeWeight:number;elapsedHours:number|null;conditionalArrivalProbability:number;posteriorSuccesses:number;posteriorFailures:number;posteriorMean:number;posteriorInterval:[number,number];discretionaryCooldown:number;alertBand:"LOW"|"WATCH"|"ELEVATED"|"HIGH"|"IMMINENT"|"CONFIRMED";policySimulation:SimulationSummary;discretionarySimulation:SimulationSummary};
+export type Forecast={id:string;generatedAt:string;horizonHours:number;probability:number;credibleIntervalLow:number;credibleIntervalHigh:number;predictedWindowStart:string;predictedWindowEnd:string;dataCutoff:string;features:Features;featureOrigins:FeatureOrigins;featureDetails:Record<FeatureName,string>;contributions:Contribution[];simulation:SimulationSummary;evidenceIds:string[];sourcePostIds:string[];modelVersion:string;configurationHash:string;mode:"demo"|"live";policyModel?:PolicyModelRecord};

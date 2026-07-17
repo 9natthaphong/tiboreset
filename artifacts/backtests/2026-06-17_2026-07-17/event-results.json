@@ -1,0 +1,383 @@
+{
+  "version": "walk-forward-2026-07-17.1",
+  "events": [
+    {
+      "eventId": "codex-milestone-6m",
+      "eventTimestamp": "2026-07-12T17:59:57.945Z",
+      "eventType": "full",
+      "milestoneUsers": 6000000,
+      "maximumPreAnnouncementProbability": 0.02536459709652239,
+      "probability36HoursBefore": 0.02536459709652239,
+      "probability24HoursBefore": 0.02536459709652239,
+      "probability12HoursBefore": 0.02536459709652239,
+      "probability6HoursBefore": 0.02536459709652239,
+      "thresholdCrossings": {
+        "0.3": null,
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    },
+    {
+      "eventId": "codex-milestone-7m",
+      "eventTimestamp": "2026-07-13T18:29:31.013Z",
+      "eventType": "banked",
+      "milestoneUsers": 7000000,
+      "maximumPreAnnouncementProbability": 0.02536459709652239,
+      "probability36HoursBefore": 0.02536459709652239,
+      "probability24HoursBefore": 0.01,
+      "probability12HoursBefore": 0.01,
+      "probability6HoursBefore": 0.01,
+      "thresholdCrossings": {
+        "0.3": null,
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    },
+    {
+      "eventId": "codex-milestone-8m",
+      "eventTimestamp": "2026-07-14T19:34:54.638Z",
+      "eventType": "full",
+      "milestoneUsers": 8000000,
+      "maximumPreAnnouncementProbability": 0.02536459709652239,
+      "probability36HoursBefore": 0.01,
+      "probability24HoursBefore": 0.01,
+      "probability12HoursBefore": 0.010563028745214975,
+      "probability6HoursBefore": 0.010709162949806506,
+      "thresholdCrossings": {
+        "0.3": null,
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    },
+    {
+      "eventId": "codex-milestone-9m",
+      "eventTimestamp": "2026-07-16T04:14:09.822Z",
+      "eventType": "full",
+      "milestoneUsers": 9000000,
+      "maximumPreAnnouncementProbability": 0.02536459709652239,
+      "probability36HoursBefore": 0.010709162949806506,
+      "probability24HoursBefore": 0.012036591751020342,
+      "probability12HoursBefore": 0.012375141545023949,
+      "probability6HoursBefore": 0.01253878548070897,
+      "thresholdCrossings": {
+        "0.3": null,
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    }
+  ],
+  "fiveHighestFalseAlarms": [
+    {
+      "cutoff": "2026-06-17T00:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.02536459709652239,
+      "low": 0.014882654720471344,
+      "high": 0.04306141565489552,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0.5,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0.235137495082373,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.39999999999999997,
+        "cooldownMilestone": 0.35
+      }
+    },
+    {
+      "cutoff": "2026-06-17T06:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.02536459709652239,
+      "low": 0.014882654720471344,
+      "high": 0.04306141565489552,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0.5,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0.235137495082373,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.39999999999999997,
+        "cooldownMilestone": 0.35
+      }
+    },
+    {
+      "cutoff": "2026-06-17T12:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.02536459709652239,
+      "low": 0.014882654720471344,
+      "high": 0.04306141565489552,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0.5,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0.235137495082373,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.39999999999999997,
+        "cooldownMilestone": 0.35
+      }
+    },
+    {
+      "cutoff": "2026-06-17T18:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.02536459709652239,
+      "low": 0.014882654720471344,
+      "high": 0.04306141565489552,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0.5,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0.235137495082373,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.39999999999999997,
+        "cooldownMilestone": 0.35
+      }
+    },
+    {
+      "cutoff": "2026-06-18T00:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.02536459709652239,
+      "low": 0.014882654720471344,
+      "high": 0.04306141565489552,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0.5,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0.235137495082373,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "milestone_proximity",
+          "contribution": 0.675
+        },
+        {
+          "name": "time_since_last_reset",
+          "contribution": 0.28
+        },
+        {
+          "name": "historical_analog_similarity",
+          "contribution": 0.12932562229530517
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.39999999999999997,
+        "cooldownMilestone": 0.35
+      }
+    }
+  ]
+}

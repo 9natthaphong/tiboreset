@@ -1,0 +1,565 @@
+{
+  "version": "reset-oracle-2.0.0",
+  "events": [
+    {
+      "eventId": "codex-milestone-6m",
+      "eventTimestamp": "2026-07-12T17:59:57.945Z",
+      "eventType": "full",
+      "milestoneUsers": 6000000,
+      "maximumPreAnnouncementProbability": 0.050889696925694894,
+      "probability36HoursBefore": 0.04940151126597159,
+      "probability24HoursBefore": 0.049337347218644356,
+      "probability12HoursBefore": 0.049243401954937926,
+      "probability6HoursBefore": 0.04916749014627586,
+      "thresholdCrossings": {
+        "0.3": null,
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.05517187809430901
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    },
+    {
+      "eventId": "codex-milestone-7m",
+      "eventTimestamp": "2026-07-13T18:29:31.013Z",
+      "eventType": "banked",
+      "milestoneUsers": 7000000,
+      "maximumPreAnnouncementProbability": 0.050889696925694894,
+      "probability36HoursBefore": 0.04916749014627586,
+      "probability24HoursBefore": 0.0050000000000000044,
+      "probability12HoursBefore": 0.0050000000000000044,
+      "probability6HoursBefore": 0.0050000000000001155,
+      "thresholdCrossings": {
+        "0.3": null,
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.05517187809430901
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    },
+    {
+      "eventId": "codex-milestone-8m",
+      "eventTimestamp": "2026-07-14T19:34:54.638Z",
+      "eventType": "full",
+      "milestoneUsers": 8000000,
+      "maximumPreAnnouncementProbability": 0.36092357858394797,
+      "probability36HoursBefore": 0.0050000000000000044,
+      "probability24HoursBefore": 0.005000000000001337,
+      "probability12HoursBefore": 0.31868996560786556,
+      "probability6HoursBefore": 0.2767731905830467,
+      "thresholdCrossings": {
+        "0.3": {
+          "at": "2026-07-14T00:00:00.000Z",
+          "leadHours": 19.58184388888889
+        },
+        "0.5": null,
+        "0.6": null,
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": false,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8571428571428571
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0.68
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.4729107122538908
+        }
+      ],
+      "missedSignalExplanation": "The frozen model did not cross 50% before the official announcement using cutoff-safe evidence."
+    },
+    {
+      "eventId": "codex-milestone-9m",
+      "eventTimestamp": "2026-07-16T04:14:09.822Z",
+      "eventType": "full",
+      "milestoneUsers": 9000000,
+      "maximumPreAnnouncementProbability": 0.6616075842544594,
+      "probability36HoursBefore": 0.2767731905830467,
+      "probability24HoursBefore": 0.6288006391208723,
+      "probability12HoursBefore": 0.6532824082656807,
+      "probability6HoursBefore": 0.615110059138071,
+      "thresholdCrossings": {
+        "0.3": {
+          "at": "2026-07-14T00:00:00.000Z",
+          "leadHours": 52.236061666666664
+        },
+        "0.5": {
+          "at": "2026-07-15T00:00:00.000Z",
+          "leadHours": 28.236061666666668
+        },
+        "0.6": {
+          "at": "2026-07-15T00:00:00.000Z",
+          "leadHours": 28.236061666666668
+        },
+        "0.7": null,
+        "0.8": null
+      },
+      "predictedBeforePublication": true,
+      "strongestPreAnnouncementFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.875
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0.86
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.7847432164478513
+        }
+      ],
+      "missedSignalExplanation": null
+    }
+  ],
+  "fiveHighestFalseAlarms": [
+    {
+      "cutoff": "2026-06-29T00:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.050889696925694894,
+      "low": 0.026077875198753042,
+      "high": 0.08804360904683073,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.05517187809430901
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.6333333333333334,
+        "cooldownMilestone": 0.55
+      },
+      "modelVersion": "reset-oracle-2.0.0",
+      "policyProbability": 0.04238220185032721,
+      "discretionaryProbability": 0.008580854960438922,
+      "alertBand": "LOW",
+      "nextTargetUsers": 6000000,
+      "interval": {
+        "intervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "longTermIntervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "recentIntervalsHours": [],
+        "longTermMedianHours": 639.3781559722222,
+        "recentMedianHours": null,
+        "longTermLogSigma": 0.7900192398332588,
+        "recentLogSigma": 0.9,
+        "regimeWeight": 0,
+        "elapsedHours": 690.0136513888889,
+        "conditionalArrivalProbability": 0.05517187809430901
+      },
+      "posterior": {
+        "successes": 3,
+        "failures": 0,
+        "alpha": 4,
+        "beta": 1,
+        "mean": 0.8,
+        "conservativeInterval": [
+          0.5313726248747781,
+          1
+        ]
+      }
+    },
+    {
+      "cutoff": "2026-06-28T18:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.05088209955508827,
+      "low": 0.025995934453252878,
+      "high": 0.08822186617496242,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.0551922678271588
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.6333333333333334,
+        "cooldownMilestone": 0.55
+      },
+      "modelVersion": "reset-oracle-2.0.0",
+      "policyProbability": 0.04237312880868856,
+      "discretionaryProbability": 0.008580854960438922,
+      "alertBand": "LOW",
+      "nextTargetUsers": 6000000,
+      "interval": {
+        "intervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "longTermIntervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "recentIntervalsHours": [],
+        "longTermMedianHours": 639.3781559722222,
+        "recentMedianHours": null,
+        "longTermLogSigma": 0.7900192398332588,
+        "recentLogSigma": 0.9,
+        "regimeWeight": 0,
+        "elapsedHours": 684.0136513888889,
+        "conditionalArrivalProbability": 0.0551922678271588
+      },
+      "posterior": {
+        "successes": 3,
+        "failures": 0,
+        "alpha": 4,
+        "beta": 1,
+        "mean": 0.8,
+        "conservativeInterval": [
+          0.5313726248747781,
+          1
+        ]
+      }
+    },
+    {
+      "cutoff": "2026-06-29T06:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.050879014259725075,
+      "low": 0.02613778482489504,
+      "high": 0.08786476205287852,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.0551496033630553
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.6333333333333334,
+        "cooldownMilestone": 0.55
+      },
+      "modelVersion": "reset-oracle-2.0.0",
+      "policyProbability": 0.0423746070136289,
+      "discretionaryProbability": 0.008580854960438922,
+      "alertBand": "LOW",
+      "nextTargetUsers": 6000000,
+      "interval": {
+        "intervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "longTermIntervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "recentIntervalsHours": [],
+        "longTermMedianHours": 639.3781559722222,
+        "recentMedianHours": null,
+        "longTermLogSigma": 0.7900192398332588,
+        "recentLogSigma": 0.9,
+        "regimeWeight": 0,
+        "elapsedHours": 696.0136513888889,
+        "conditionalArrivalProbability": 0.0551496033630553
+      },
+      "posterior": {
+        "successes": 3,
+        "failures": 0,
+        "alpha": 4,
+        "beta": 1,
+        "mean": 0.8,
+        "conservativeInterval": [
+          0.5313726248747781,
+          1
+        ]
+      }
+    },
+    {
+      "cutoff": "2026-06-29T12:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.050874789832708545,
+      "low": 0.026188048677595166,
+      "high": 0.08763593760902177,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.05512550746466838
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.6333333333333334,
+        "cooldownMilestone": 0.55
+      },
+      "modelVersion": "reset-oracle-2.0.0",
+      "policyProbability": 0.042376991177738146,
+      "discretionaryProbability": 0.008580854960438922,
+      "alertBand": "LOW",
+      "nextTargetUsers": 6000000,
+      "interval": {
+        "intervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "longTermIntervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "recentIntervalsHours": [],
+        "longTermMedianHours": 639.3781559722222,
+        "recentMedianHours": null,
+        "longTermLogSigma": 0.7900192398332588,
+        "recentLogSigma": 0.9,
+        "regimeWeight": 0,
+        "elapsedHours": 702.0136513888889,
+        "conditionalArrivalProbability": 0.05512550746466838
+      },
+      "posterior": {
+        "successes": 3,
+        "failures": 0,
+        "alpha": 4,
+        "beta": 1,
+        "mean": 0.8,
+        "conservativeInterval": [
+          0.5313726248747781,
+          1
+        ]
+      }
+    },
+    {
+      "cutoff": "2026-06-29T18:00:00.000Z",
+      "test": "strict_pre_announcement",
+      "probability": 0.05086482409731086,
+      "low": 0.026224303446880093,
+      "high": 0.0874553472980929,
+      "outcome": false,
+      "evidenceIds": [],
+      "features": {
+        "explicit_reset_confirmation": 0,
+        "explicit_reset_hint": 0,
+        "public_commitment_strength": 0,
+        "milestone_proximity": 0,
+        "milestone_velocity": 0,
+        "time_since_last_reset": 1,
+        "recent_reset_suppression": 0,
+        "usage_incident_strength": 0,
+        "capacity_concern": 0,
+        "promotional_signal": 0,
+        "product_launch_signal": 0,
+        "community_poll_signal": 0,
+        "historical_analog_success_rate": 0,
+        "historical_analog_similarity": 0,
+        "signal_frequency_change": 0,
+        "evidence_recency": 0,
+        "source_reliability": 0,
+        "unresolved_ambiguity_penalty": 0
+      },
+      "strongestFeatures": [
+        {
+          "name": "reset_given_milestone_posterior",
+          "contribution": 0.8
+        },
+        {
+          "name": "milestone_arrival_pressure",
+          "contribution": 0.05509965212189938
+        },
+        {
+          "name": "recent_milestone_regime",
+          "contribution": 0
+        }
+      ],
+      "baselines": {
+        "timeSinceReset": 0.39999999999999997,
+        "milestoneProximity": 0.6333333333333334,
+        "cooldownMilestone": 0.55
+      },
+      "modelVersion": "reset-oracle-2.0.0",
+      "policyProbability": 0.042355298829794656,
+      "discretionaryProbability": 0.008580854960438922,
+      "alertBand": "LOW",
+      "nextTargetUsers": 6000000,
+      "interval": {
+        "intervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "longTermIntervalsHours": [
+          327.63989305555555,
+          951.1164188888889
+        ],
+        "recentIntervalsHours": [],
+        "longTermMedianHours": 639.3781559722222,
+        "recentMedianHours": null,
+        "longTermLogSigma": 0.7900192398332588,
+        "recentLogSigma": 0.9,
+        "regimeWeight": 0,
+        "elapsedHours": 708.0136513888889,
+        "conditionalArrivalProbability": 0.05509965212189938
+      },
+      "posterior": {
+        "successes": 3,
+        "failures": 0,
+        "alpha": 4,
+        "beta": 1,
+        "mean": 0.8,
+        "conservativeInterval": [
+          0.5313726248747781,
+          1
+        ]
+      }
+    }
+  ]
+}

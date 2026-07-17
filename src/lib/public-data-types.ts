@@ -93,7 +93,11 @@ export type PublicHealth = {
   email: "disabled" | "configured" | "configuration_error";
   lastIngestionAt: string | null;
   lastForecastAt: string | null;
-  latestRun: { postsRead: number; newPostsScreened: number; relevantPostsAnalyzed: number; forecastChanged: boolean } | null;
+  lastForecastCalculatedAt: string | null;
+  lastForecastSavedAt: string | null;
+  currentModelVersion: string | null;
+  forecastFreshness: "FRESH" | "STALE";
+  latestRun: { postsRead: number; newPostsScreened: number; relevantPostsAnalyzed: number; forecastRecalculated: boolean; forecastChanged: boolean; forecastSaveReason: string | null } | null;
 };
 
 export type PublicSnapshot = {

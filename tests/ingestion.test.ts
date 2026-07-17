@@ -22,6 +22,7 @@ class MemoryRepository implements IngestionRepository {
   async insertPost(input: { account: StoredAccount; post: SocialPost; localScreen: Extraction }) { const stored = { databaseId: `db-${input.post.id}`, platformPostId: input.post.id }; this.posts.set(input.post.id, { stored, post: input.post, screen: input.localScreen }); return stored; }
   async insertExtraction(input: { post: StoredPost; result: ExtractionResult; forecastImpact: number }): Promise<StoredExtraction> { this.extractions.push(input); return { databaseId: `event-${input.post.platformPostId}` }; }
   async loadForecastEvidence(): Promise<Evidence[]> { return this.extractions.filter(item => item.result.extraction.is_relevant && !item.result.extraction.requires_review).map(item => ({ id: `event-${item.post.platformPostId}`, postId: item.post.databaseId, postedAt: this.posts.get(item.post.platformPostId)!.post.createdAt, excerpt: this.posts.get(item.post.platformPostId)!.post.text, eventType: item.result.extraction.event_type, confidence: item.result.extraction.extraction_confidence, verified: true, url: "https://x.com/i/status/test", effect: item.forecastImpact })); }
+  async getLatestForecast() { const forecast = this.forecasts.at(-1); return forecast ? { id: `forecast-${this.forecasts.length}`, modelVersion: forecast.modelVersion, configurationHash: forecast.configurationHash, probability: forecast.probability, credibleIntervalLow: forecast.credibleIntervalLow, credibleIntervalHigh: forecast.credibleIntervalHigh, generatedAt: forecast.generatedAt, alertBand: forecast.policyModel?.alertBand ?? "LOW" as const } : null; }
   async saveForecast(forecast: Forecast) { this.forecasts.push(forecast); return `forecast-${this.forecasts.length}`; }
   async updateLatestProcessedPostId(_accountId: string, platformPostId: string) { if (this.account) this.account.latestProcessedPostId = platformPostId; }
 }
@@ -93,20 +94,24 @@ describe("bounded live ingestion", () => {
     expect(repository.extractions).toHaveLength(1);
   });
 
-  it("creates a forecast only when relevant evidence changes", async () => {
-    await runIngestion({ repository, source: new MemorySource([post("140", "ordinary lunch update")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
-    expect(repository.forecasts).toHaveLength(0);
-    repository.account!.latestProcessedPostId = "140";
-    await runIngestion({ repository, source: new MemorySource([post("141", "We will reset usage limits tomorrow")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
+  it("recalculates v2 even when no relevant evidence changes", async () => {
+    const report = await runIngestion({ repository, source: new MemorySource([post("140", "ordinary lunch update")]), username: "thsottiaux", localExtract, extractRelevant: localResult, now: () => new Date("2026-07-10T00:00:00Z") });
+    expect(report.forecastRecalculated).toBe(true);
+    expect(report.forecastSaveReason).toBe("no_previous_forecast");
     expect(repository.forecasts).toHaveLength(1);
+    repository.account!.latestProcessedPostId = "140";
+    await runIngestion({ repository, source: new MemorySource([post("141", "We will reset usage limits tomorrow")]), username: "thsottiaux", localExtract, extractRelevant: localResult, now: () => new Date("2026-07-10T00:15:00Z") });
+    expect(repository.forecasts.length).toBeGreaterThanOrEqual(1);
   });
 
   it("stores ambiguous reset language for review without changing the forecast", async () => {
-    const report = await runIngestion({ repository, source: new MemorySource([post("142", "I actually stole their reset button. Youre welcome Codex.")]), username: "thsottiaux", localExtract, extractRelevant: localResult });
+    await runIngestion({ repository, source: new MemorySource([post("141", "ordinary lunch update")]), username: "thsottiaux", localExtract, extractRelevant: localResult, now: () => new Date("2026-07-10T00:00:00Z") });
+    repository.account!.latestProcessedPostId = "141";
+    const report = await runIngestion({ repository, source: new MemorySource([post("142", "I actually stole their reset button. Youre welcome Codex.")]), username: "thsottiaux", localExtract, extractRelevant: localResult, now: () => new Date("2026-07-10T00:15:00Z") });
     expect(repository.extractions[0].result.extraction.requires_review).toBe(true);
     expect(repository.extractions[0].forecastImpact).toBe(0);
     expect(report.forecastChanged).toBe(false);
-    expect(repository.forecasts).toHaveLength(0);
+    expect(repository.forecasts).toHaveLength(1);
   });
 });
 

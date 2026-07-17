@@ -8,6 +8,7 @@ import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis }
 import type { Forecast } from "@/lib/forecasting";
 import type { HistoryPoint, ResetHistoryItem } from "@/lib/public-data-types";
 import { formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
+import type { PublicBacktestSummary } from "@/lib/backtest-report";
 
 const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), {
   ssr: false,
@@ -68,14 +69,42 @@ const contributionExplanations: Record<string, string> = {
 };
 
 const viewOrder: ForecastView[] = ["movement", "signals", "range"];
+const probabilityBand = (probability: number) => probability >= .98 ? "CONFIRMED" : probability >= .8 ? "IMMINENT" : probability >= .6 ? "HIGH" : probability >= .4 ? "ELEVATED" : probability >= .2 ? "WATCH" : "LOW";
 
-export default function Charts({ forecast, history, resetHistory }: { forecast: Forecast; history: HistoryPoint[]; resetHistory: ResetHistoryItem[] }) {
+export default function Charts({ forecast, history, resetHistory, backtestSummary }: { forecast: Forecast; history: HistoryPoint[]; resetHistory: ResetHistoryItem[]; backtestSummary: PublicBacktestSummary | null }) {
   const [view, setView] = useState<ForecastView>("movement");
   const [range, setRange] = useState<Range>("ALL");
   const [trendView, setTrendView] = useState<TrendView>("live");
   const [focused, setFocused] = useState<HistoryPoint | null>(null);
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(true);
+  const policyRecord = forecast.policyModel
+    ? {
+        combinedProbability: forecast.probability,
+        policyProbability: forecast.policyModel.policyProbability,
+        discretionaryProbability: forecast.policyModel.discretionaryProbability,
+        nextTargetUsers: forecast.policyModel.nextTargetUsers,
+        recentMedianHours: forecast.policyModel.recentIntervalMedianHours,
+        longTermMedianHours: forecast.policyModel.longTermIntervalMedianHours,
+        regimeWeight: forecast.policyModel.regimeWeight,
+        elapsedHours: forecast.policyModel.elapsedHours,
+        conditionalArrivalProbability: forecast.policyModel.conditionalArrivalProbability,
+        posteriorSuccesses: forecast.policyModel.posteriorSuccesses,
+        posteriorFailures: forecast.policyModel.posteriorFailures,
+        posteriorMean: forecast.policyModel.posteriorMean,
+        posteriorInterval: forecast.policyModel.posteriorInterval,
+        discretionaryCooldown: forecast.policyModel.discretionaryCooldown,
+        alertBand: forecast.policyModel.alertBand,
+        experimental: false,
+      }
+    : backtestSummary?.policySnapshot
+      ? {
+          ...backtestSummary.policySnapshot,
+          discretionaryCooldown: forecast.features.recent_reset_suppression,
+          alertBand: probabilityBand(backtestSummary.policySnapshot.combinedProbability),
+          experimental: true,
+        }
+      : null;
   const latestTime = Date.parse(history.at(-1)?.time ?? forecast.generatedAt);
   const filtered = useMemo(
     () =>
@@ -503,6 +532,36 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
                 </ol>
               </div>
             </section>
+            {policyRecord && (
+              <section className="policy-branch-record" aria-labelledby="policy-branch-title">
+                <header>
+                  <span>RESET PROBABILITY</span>
+                  <h3 id="policy-branch-title">Two causes. One combined forecast.</h3>
+                  <p>Reset Oracle separately estimates when the next pledged user milestone will arrive and whether a reset is likely when it does. It then combines that policy-driven risk with live public signals.</p>
+                </header>
+                <div className="policy-branch-values">
+                  <div><span>Policy-driven reset risk</span><strong>{Math.round(policyRecord.policyProbability * 100)}%</strong></div>
+                  <div><span>Signal-driven reset risk</span><strong>{Math.round(policyRecord.discretionaryProbability * 100)}%</strong></div>
+                  <div><span>Combined {forecast.horizonHours}-hour probability</span><strong>{Math.round(policyRecord.combinedProbability * 100)}%</strong><em>{policyRecord.alertBand}</em></div>
+                </div>
+                <dl>
+                  <div><dt>Next pledged milestone</dt><dd>{policyRecord.nextTargetUsers ? `${policyRecord.nextTargetUsers / 1_000_000}M` : "Policy fulfilled — awaiting commitment"}</dd></div>
+                  <div><dt>Elapsed since latest milestone</dt><dd>{policyRecord.elapsedHours == null ? "Unavailable" : `${policyRecord.elapsedHours.toFixed(1)} hours`}</dd></div>
+                  <div><dt>Recent milestone cadence</dt><dd>{policyRecord.recentMedianHours == null ? "No recent regime" : `${policyRecord.recentMedianHours.toFixed(1)} hours`}</dd></div>
+                  <div><dt>Long-term cadence</dt><dd>{policyRecord.longTermMedianHours == null ? "Unavailable" : `${policyRecord.longTermMedianHours.toFixed(1)} hours`}</dd></div>
+                  <div><dt>Recent-regime weight</dt><dd>{Math.round(policyRecord.regimeWeight * 100)}%</dd></div>
+                  <div><dt>Milestone arrival pressure</dt><dd>{Math.round(policyRecord.conditionalArrivalProbability * 100)}%</dd></div>
+                  <div><dt>Reset at milestone posterior</dt><dd>{Math.round(policyRecord.posteriorMean * 100)}% · {policyRecord.posteriorSuccesses} success / {policyRecord.posteriorFailures} failure</dd></div>
+                  <div><dt>Discretionary cooldown</dt><dd>{Math.round(policyRecord.discretionaryCooldown * 100)}% · signal branch only</dd></div>
+                </dl>
+                {policyRecord.experimental && <footer>Experimental policy snapshot at the cached backtest endpoint.</footer>}
+              </section>
+            )}
+            {backtestSummary && <section className="public-backtest-summary" aria-labelledby="public-backtest-title">
+              <header><span>STRICT PRE-ANNOUNCEMENT BACKTEST</span><h3 id="public-backtest-title">{backtestSummary.interpretation}</h3><p>Historical simulation, not a guarantee of future resets.</p></header>
+              <dl><div><dt>Evaluation period</dt><dd>{formatUtcShortDate(backtestSummary.from)}–{formatUtcShortDate(backtestSummary.to)}</dd></div><div><dt>Six-hour cutoffs</dt><dd>{backtestSummary.sampleSize}</dd></div><div><dt>Brier score</dt><dd>{backtestSummary.brierScore.toFixed(4)}</dd></div><div><dt>Base-rate Brier</dt><dd>{backtestSummary.baselineBrierScore.toFixed(4)}</dd></div><div><dt>Brier skill</dt><dd>{backtestSummary.brierSkillScore?.toFixed(4) ?? "Unavailable"}</dd></div><div><dt>Resets above 50%</dt><dd>{backtestSummary.resetsAbove50}</dd></div><div><dt>Median lead time</dt><dd>{backtestSummary.medianLeadHours == null ? "Not reached" : `${backtestSummary.medianLeadHours.toFixed(1)} hours`}</dd></div><div><dt>Calibration</dt><dd>{backtestSummary.calibrationStatus}</dd></div></dl>
+              <footer>Report {backtestSummary.version}</footer>
+            </section>}
             <AdvancedDiagnostics forecast={forecast} />
           </div>
         )}

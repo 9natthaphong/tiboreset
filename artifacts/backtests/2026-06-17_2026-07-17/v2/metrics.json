@@ -1,0 +1,292 @@
+{
+  "version": "reset-oracle-2.0.0",
+  "evaluationPeriod": {
+    "from": "2026-06-17T00:00:00Z",
+    "to": "2026-07-17T00:00:00Z",
+    "stepHours": 6,
+    "horizonHours": 36
+  },
+  "rollingCutoffs": 120,
+  "scoredCutoffs": 115,
+  "rightCensoredCutoffs": 5,
+  "realtime": {
+    "cutoffs": 115,
+    "positiveWindows": 18,
+    "negativeWindows": 97,
+    "eventBaseRate": 0.1565217391304348,
+    "brierScore": 0.1355790616584086,
+    "baselineBrierScore": 0.13202268431001885,
+    "brierSkillScore": -0.02693762338628547,
+    "logLoss": 0.5161743898095602,
+    "rocAuc": 0.6844215349369989,
+    "averagePrecision": 0.4187708224339513,
+    "calibration": [
+      {
+        "label": "0-10%",
+        "count": 42,
+        "meanProbability": 0.0816972178183791,
+        "observedRate": 0.11904761904761904
+      },
+      {
+        "label": "10-30%",
+        "count": 63,
+        "meanProbability": 0.11919444752890285,
+        "observedRate": 0.1111111111111111
+      },
+      {
+        "label": "30-50%",
+        "count": 2,
+        "meanProbability": 0.3235195618208049,
+        "observedRate": 1
+      },
+      {
+        "label": "50-70%",
+        "count": 2,
+        "meanProbability": 0.6723920695236951,
+        "observedRate": 1
+      },
+      {
+        "label": "70-90%",
+        "count": 0,
+        "meanProbability": null,
+        "observedRate": null
+      },
+      {
+        "label": "90-100%",
+        "count": 6,
+        "meanProbability": 0.9800000000000001,
+        "observedRate": 0.3333333333333333
+      }
+    ],
+    "thresholds": [
+      {
+        "threshold": 0.3,
+        "precision": 0.6,
+        "recall": 0.3333333333333333,
+        "falsePositives": 4,
+        "falseNegatives": 12
+      },
+      {
+        "threshold": 0.5,
+        "precision": 0.5,
+        "recall": 0.2222222222222222,
+        "falsePositives": 4,
+        "falseNegatives": 14
+      },
+      {
+        "threshold": 0.6,
+        "precision": 0.5,
+        "recall": 0.2222222222222222,
+        "falsePositives": 4,
+        "falseNegatives": 14
+      },
+      {
+        "threshold": 0.7,
+        "precision": 0.3333333333333333,
+        "recall": 0.1111111111111111,
+        "falsePositives": 4,
+        "falseNegatives": 16
+      },
+      {
+        "threshold": 0.8,
+        "precision": 0.3333333333333333,
+        "recall": 0.1111111111111111,
+        "falsePositives": 4,
+        "falseNegatives": 16
+      }
+    ],
+    "baselineScores": {
+      "timeSinceReset": 0.2467191756567165,
+      "milestoneProximity": 0.3574337761674722,
+      "cooldownMilestone": 0.3129948700617913
+    }
+  },
+  "strictPreAnnouncement": {
+    "cutoffs": 115,
+    "positiveWindows": 18,
+    "negativeWindows": 97,
+    "eventBaseRate": 0.1565217391304348,
+    "brierScore": 0.1127094979765687,
+    "baselineBrierScore": 0.13202268431001885,
+    "brierSkillScore": 0.14628687815571484,
+    "logLoss": 0.48453693917672264,
+    "rocAuc": 0.4198167239404353,
+    "averagePrecision": 0.4635926377439092,
+    "calibration": [
+      {
+        "label": "0-10%",
+        "count": 108,
+        "meanProbability": 0.04804519426008219,
+        "observedRate": 0.10185185185185185
+      },
+      {
+        "label": "10-30%",
+        "count": 2,
+        "meanProbability": 0.2590960836221459,
+        "observedRate": 1
+      },
+      {
+        "label": "30-50%",
+        "count": 2,
+        "meanProbability": 0.33980677209590676,
+        "observedRate": 1
+      },
+      {
+        "label": "50-70%",
+        "count": 3,
+        "meanProbability": 0.6478968772136708,
+        "observedRate": 1
+      },
+      {
+        "label": "70-90%",
+        "count": 0,
+        "meanProbability": null,
+        "observedRate": null
+      },
+      {
+        "label": "90-100%",
+        "count": 0,
+        "meanProbability": null,
+        "observedRate": null
+      }
+    ],
+    "thresholds": [
+      {
+        "threshold": 0.3,
+        "precision": 1,
+        "recall": 0.2777777777777778,
+        "falsePositives": 0,
+        "falseNegatives": 13
+      },
+      {
+        "threshold": 0.5,
+        "precision": 1,
+        "recall": 0.16666666666666666,
+        "falsePositives": 0,
+        "falseNegatives": 15
+      },
+      {
+        "threshold": 0.6,
+        "precision": 1,
+        "recall": 0.16666666666666666,
+        "falsePositives": 0,
+        "falseNegatives": 15
+      },
+      {
+        "threshold": 0.7,
+        "precision": null,
+        "recall": 0,
+        "falsePositives": 0,
+        "falseNegatives": 18
+      },
+      {
+        "threshold": 0.8,
+        "precision": null,
+        "recall": 0,
+        "falsePositives": 0,
+        "falseNegatives": 18
+      }
+    ],
+    "baselineScores": {
+      "timeSinceReset": 0.2467191756567165,
+      "milestoneProximity": 0.3574337761674722,
+      "cooldownMilestone": 0.3129948700617913
+    }
+  },
+  "currentSnapshot": {
+    "cutoff": "2026-07-16T18:00:00.000Z",
+    "test": "strict_pre_announcement",
+    "probability": 0.7456296315150157,
+    "low": 0.5698460854824207,
+    "high": 0.881107859451663,
+    "outcome": false,
+    "evidenceIds": [],
+    "features": {
+      "explicit_reset_confirmation": 0,
+      "explicit_reset_hint": 0,
+      "public_commitment_strength": 0,
+      "milestone_proximity": 0,
+      "milestone_velocity": 0,
+      "time_since_last_reset": 0.01911658101851852,
+      "recent_reset_suppression": 0.9808834189814815,
+      "usage_incident_strength": 0,
+      "capacity_concern": 0,
+      "promotional_signal": 0,
+      "product_launch_signal": 0,
+      "community_poll_signal": 0,
+      "historical_analog_success_rate": 0,
+      "historical_analog_similarity": 0,
+      "signal_frequency_change": 0,
+      "evidence_recency": 0,
+      "source_reliability": 0,
+      "unresolved_ambiguity_penalty": 0
+    },
+    "strongestFeatures": [
+      {
+        "name": "recent_milestone_regime",
+        "contribution": 0.93
+      },
+      {
+        "name": "reset_given_milestone_posterior",
+        "contribution": 0.8888888888888888
+      },
+      {
+        "name": "milestone_arrival_pressure",
+        "contribution": 0.8584708192918113
+      }
+    ],
+    "baselines": {
+      "timeSinceReset": 0.05669080335648148,
+      "milestoneProximity": 0.68,
+      "cooldownMilestone": 0.3447791452546297
+    },
+    "modelVersion": "reset-oracle-2.0.0",
+    "policyProbability": 0.7443513884573022,
+    "discretionaryProbability": 0.005,
+    "alertBand": "HIGH",
+    "nextTargetUsers": 10000000,
+    "interval": {
+      "intervalsHours": [
+        327.63989305555555,
+        951.1164188888889,
+        1020.0130805555556,
+        24.49251888888889,
+        25.089895833333333,
+        32.65421777777778
+      ],
+      "longTermIntervalsHours": [
+        327.63989305555555,
+        951.1164188888889,
+        1020.0130805555556
+      ],
+      "recentIntervalsHours": [
+        24.49251888888889,
+        25.089895833333333,
+        32.65421777777778
+      ],
+      "longTermMedianHours": 951.1164188888889,
+      "recentMedianHours": 25.089895833333333,
+      "longTermLogSigma": 0.35,
+      "recentLogSigma": 0.45,
+      "regimeWeight": 0.93,
+      "elapsedHours": 13.763938333333334,
+      "conditionalArrivalProbability": 0.8584708192918113
+    },
+    "posterior": {
+      "successes": 7,
+      "failures": 0,
+      "alpha": 8,
+      "beta": 1,
+      "mean": 0.8888888888888888,
+      "conservativeInterval": [
+        0.7254074745339042,
+        1
+      ]
+    }
+  },
+  "beatsV1": true,
+  "beatsConstantBaseline": true,
+  "productionDefaultEligible": true,
+  "interpretation": "Promising but unvalidated",
+  "verifiedEventCount": 4
+}

@@ -2,6 +2,7 @@ import type { Extraction } from "@/lib/extraction/schema";
 import type { Forecast, ForecastContext } from "@/lib/forecasting";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
 import type { MilestoneEvent } from "@/lib/milestones";
+import type { ForecastSaveReason, StoredForecastSummary } from "@/lib/forecasting/current-refresh";
 
 export type StoredAccount = SocialAccount & { databaseId: string; latestProcessedPostId?: string };
 export type StoredPost = { databaseId: string; platformPostId: string };
@@ -22,7 +23,11 @@ export type IngestionReport = {
   postsRead: number;
   postsInserted: number;
   postsAnalyzed: number;
+  forecastRecalculated: true;
   forecastChanged: boolean;
+  forecastSaveReason: ForecastSaveReason;
+  forecastCalculatedAt: string;
+  forecastModelVersion: string;
   forecastId: string | null;
   durationMs: number;
   completedAt: string;
@@ -42,6 +47,7 @@ export interface IngestionRepository {
   upsertMilestoneCandidate?(input: { candidate: MilestoneEvent; post: StoredPost }): Promise<void>;
   loadForecastEvidence(): Promise<import("@/lib/forecasting").Evidence[]>;
   loadForecastContext?(): Promise<ForecastContext>;
+  getLatestForecast(): Promise<StoredForecastSummary | null>;
   saveForecast(forecast: Forecast): Promise<string>;
   updateLatestProcessedPostId(accountId: string, platformPostId: string, updatedAt: string): Promise<void>;
 }

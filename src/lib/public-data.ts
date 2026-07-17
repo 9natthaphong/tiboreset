@@ -14,6 +14,7 @@ import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHis
 import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMilestoneState, PublicMode, PublicSnapshot, ResetHistoryItem } from "@/lib/public-data-types";
 import { buildMilestoneSeedRows } from "@/lib/historical-data";
 import { deriveMilestoneState, type MilestoneEvent } from "@/lib/milestones";
+import { forecastFreshness } from "@/lib/forecasting/current-refresh";
 
 const eventTypes = ["explicit_reset_confirmation","reset_hint","milestone_commitment","milestone_progress","usage_incident","capacity_signal","limit_policy_change","product_launch","promotion","community_poll","general_codex_update","irrelevant"] as const;
 const eventTypeSchema = z.enum(eventTypes);
@@ -105,7 +106,7 @@ const seedMilestoneState = () => publicMilestoneState(buildMilestoneSeedRows());
 
 function demoHealth(): PublicHealth {
   const forecast = currentForecast();
-  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt, latestRun: null };
+  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt, lastForecastCalculatedAt: forecast.generatedAt, lastForecastSavedAt: forecast.generatedAt, currentModelVersion: forecast.modelVersion, forecastFreshness: forecastFreshness(forecast.generatedAt, forecast.modelVersion), latestRun: null };
 }
 
 async function livePosts(client: SupabaseClient, limit: number): Promise<LatestPostsResponse> {
@@ -187,6 +188,8 @@ async function mapLiveForecast(client: SupabaseClient, raw: unknown): Promise<Fo
   const configurationHash = createHash("sha256").update(JSON.stringify(modelResult.data?.configuration ?? MODEL_CONFIG)).digest("hex").slice(0, 16);
   const generated = Date.parse(row.generated_at);
   const features = row.feature_snapshot as Features;
+  const storedPolicy = row.simulation_summary.policyModel;
+  const policyModel = storedPolicy && typeof storedPolicy === "object" ? storedPolicy as Forecast["policyModel"] : undefined;
   return {
     id: row.id, generatedAt: row.generated_at, horizonHours: row.horizon_hours, probability: row.probability,
     credibleIntervalLow: row.credible_interval_low, credibleIntervalHigh: row.credible_interval_high,
@@ -195,7 +198,7 @@ async function mapLiveForecast(client: SupabaseClient, raw: unknown): Promise<Fo
     dataCutoff: row.data_cutoff, features, featureOrigins: featureOriginsFromSimulation(features, row.simulation_summary), featureDetails: featureDetailsFromSimulation(features, row.simulation_summary), contributions,
     simulation: row.simulation_summary as unknown as SimulationSummary,
     evidenceIds: (eventResult.data ?? []).map(item => String(item.id)), sourcePostIds: row.evidence_post_ids,
-    modelVersion, configurationHash, mode: "live",
+    modelVersion, configurationHash, mode: "live", policyModel,
   };
 }
 
@@ -260,14 +263,24 @@ export async function getPublicHealth(): Promise<PublicHealth> {
   if (!client) return demoHealth();
   try {
     const [forecastResult, ingestionResult] = await Promise.all([
-      client.from("forecasts").select("generated_at").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
+      client.from("forecasts").select("generated_at,forecast_model_id").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
       client.from("ingestion_runs").select("completed_at,posts_read,posts_inserted,posts_analyzed,metadata").eq("status", "success").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (forecastResult.error || ingestionResult.error) throw new Error("health unavailable");
+    const modelResult = forecastResult.data?.forecast_model_id
+      ? await client.from("forecast_models").select("version").eq("id", forecastResult.data.forecast_model_id).maybeSingle()
+      : { data: null, error: null };
+    if (modelResult.error) throw new Error("forecast model unavailable");
     const run = ingestionResult.data;
     const metadata = run?.metadata && typeof run.metadata === "object" ? run.metadata as Record<string, unknown> : {};
-    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: run?.completed_at ?? null, lastForecastAt: forecastResult.data?.generated_at ?? null, latestRun: run ? { postsRead: Number(run.posts_read ?? 0), newPostsScreened: Number(run.posts_inserted ?? 0), relevantPostsAnalyzed: Number(run.posts_analyzed ?? 0), forecastChanged: metadata.forecastChanged === true } : null };
-  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: null, lastForecastAt: null, latestRun: null }; }
+    const savedAt = forecastResult.data?.generated_at ?? null;
+    const storedModelVersion = typeof modelResult.data?.version === "string" ? modelResult.data.version : null;
+    const runCalculatedAt = typeof metadata.forecastCalculatedAt === "string" ? metadata.forecastCalculatedAt : null;
+    const savedForecastIsNewer = savedAt != null && (runCalculatedAt == null || Date.parse(savedAt) >= Date.parse(runCalculatedAt));
+    const calculatedAt = savedForecastIsNewer ? savedAt : runCalculatedAt;
+    const calculationModelVersion = savedForecastIsNewer ? storedModelVersion : typeof metadata.forecastModelVersion === "string" ? metadata.forecastModelVersion : storedModelVersion;
+    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: run?.completed_at ?? null, lastForecastAt: savedAt, lastForecastCalculatedAt: calculatedAt, lastForecastSavedAt: savedAt, currentModelVersion: storedModelVersion, forecastFreshness: forecastFreshness(calculatedAt, calculationModelVersion), latestRun: run ? { postsRead: Number(run.posts_read ?? 0), newPostsScreened: Number(run.posts_inserted ?? 0), relevantPostsAnalyzed: Number(run.posts_analyzed ?? 0), forecastRecalculated: metadata.forecastRecalculated === true, forecastChanged: metadata.forecastChanged === true, forecastSaveReason: typeof metadata.forecastSaveReason === "string" ? metadata.forecastSaveReason : null } : null };
+  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: null, lastForecastAt: null, lastForecastCalculatedAt: null, lastForecastSavedAt: null, currentModelVersion: null, forecastFreshness: "STALE", latestRun: null }; }
 }
 
 export async function getPublicSnapshot(): Promise<PublicSnapshot> {

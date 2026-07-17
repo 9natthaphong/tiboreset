@@ -1,13 +1,14 @@
-import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Extraction } from "@/lib/extraction/schema";
 import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
 import type { Evidence, Forecast, ForecastContext } from "@/lib/forecasting";
+import { MODEL_V2_VERSION } from "@/lib/forecasting/v2";
+import { policyAlertBand } from "@/lib/forecasting/v2";
+import type { StoredForecastSummary } from "@/lib/forecasting/current-refresh";
 import { extractMilestoneUsers, type KnownResetSeedRow, type HistoricalSeedRepository } from "@/lib/historical-data";
 import { versionedForecastContext } from "@/lib/forecast-context";
-import { getServiceSupabase } from "@/lib/supabase/server";
 import type { ExtractionResult, IngestionReport, IngestionRepository, StoredAccount, StoredExtraction, StoredPost } from "./types";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
 import { MILESTONE_TARGET_POLICY, type MilestoneEvent } from "@/lib/milestones";
@@ -47,7 +48,7 @@ function stableUuid(value: string) {
 }
 
 export class SupabaseIngestionRepository implements IngestionRepository, HistoricalSeedRepository {
-  constructor(private client: SupabaseClient = getServiceSupabase()) {}
+  constructor(private client: SupabaseClient) {}
 
   async startRun(input: { source: "x"; startedAt: string }) {
     const result = await this.client.from("ingestion_runs").insert({ source: input.source, started_at: input.startedAt, status: "running", metadata: { boundedFetchLimit: 10 } }).select("id").single();
@@ -65,7 +66,11 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
       metadata: {
         durationMs: report.durationMs,
         accountResolved: report.accountResolved,
+        forecastRecalculated: report.forecastRecalculated,
         forecastChanged: report.forecastChanged,
+        forecastSaveReason: report.forecastSaveReason,
+        forecastCalculatedAt: report.forecastCalculatedAt,
+        forecastModelVersion: report.forecastModelVersion,
         forecastId: report.forecastId,
         xResourcesConsumed: report.xResourcesConsumed,
         boundedFetchLimit: 10,
@@ -250,13 +255,62 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
           verified: row.verified === true,
         };
       }),
-      milestoneObservations: milestoneRows.length ? milestoneRows.map(row => ({ occurredAt: String(row.announced_at), milestoneUsers: Number(row.reported_active_users), verified: true })) : base.milestoneObservations,
+      milestoneObservations: milestoneRows.length ? milestoneRows.map(row => ({ occurredAt: String(row.announced_at), milestoneUsers: Number(row.reported_active_users), verified: true, resetType: row.reset_type as "full" | "banked" | "scheduled" | "announcement_only" })) : base.milestoneObservations,
       nextPledgedMilestoneUsers: nextTarget,
     };
   }
 
+  async getLatestForecast(): Promise<StoredForecastSummary | null> {
+    const forecastResult = await this.client.from("forecasts").select("id,forecast_model_id,generated_at,probability,credible_interval_low,credible_interval_high,simulation_summary").order("generated_at", { ascending: false }).limit(1).maybeSingle();
+    throwOnError(forecastResult.error, "Unable to load latest forecast");
+    if (!forecastResult.data) return null;
+    const modelResult = forecastResult.data.forecast_model_id
+      ? await this.client.from("forecast_models").select("version,configuration").eq("id", forecastResult.data.forecast_model_id).maybeSingle()
+      : { data: null, error: null };
+    throwOnError(modelResult.error, "Unable to load latest forecast model");
+    const simulation = forecastResult.data.simulation_summary && typeof forecastResult.data.simulation_summary === "object"
+      ? forecastResult.data.simulation_summary as Record<string, unknown>
+      : {};
+    const policyModel = simulation.policyModel && typeof simulation.policyModel === "object"
+      ? simulation.policyModel as Record<string, unknown>
+      : {};
+    const probability = Number(forecastResult.data.probability);
+    const storedBand = policyModel.alertBand;
+    return {
+      id: String(forecastResult.data.id),
+      modelVersion: typeof modelResult.data?.version === "string" ? modelResult.data.version : MODEL_CONFIG.version,
+      configurationHash: typeof simulation.configurationHash === "string"
+        ? simulation.configurationHash
+        : createHash("sha256").update(JSON.stringify(modelResult.data?.configuration ?? MODEL_CONFIG)).digest("hex").slice(0, 16),
+      probability,
+      credibleIntervalLow: Number(forecastResult.data.credible_interval_low),
+      credibleIntervalHigh: Number(forecastResult.data.credible_interval_high),
+      generatedAt: String(forecastResult.data.generated_at),
+      alertBand: storedBand === "LOW" || storedBand === "WATCH" || storedBand === "ELEVATED" || storedBand === "HIGH" || storedBand === "IMMINENT" || storedBand === "CONFIRMED"
+        ? storedBand
+        : policyAlertBand(probability),
+    };
+  }
+
   async saveForecast(forecast: Forecast): Promise<string> {
-    const modelResult = await this.client.from("forecast_models").upsert({ name: MODEL_CONFIG.name, version: MODEL_CONFIG.version, configuration: MODEL_CONFIG, active: true }, { onConflict: "version" }).select("id").single();
+    const isPolicyModel = forecast.modelVersion === MODEL_V2_VERSION;
+    const modelConfiguration = isPolicyModel
+      ? {
+          name: "RESET ORACLE policy-aware expert prior",
+          version: MODEL_V2_VERSION,
+          causalBranches: ["pledged_milestone_reset", "discretionary_reset"],
+          milestoneArrivalModel: "recency-weighted log-normal renewal mixture",
+          resetGivenMilestonePrior: "Beta(1, 1)",
+          discretionaryCoefficientSource: MODEL_CONFIG.version,
+          productionDefault: true,
+        }
+      : MODEL_CONFIG;
+    const modelResult = await this.client.from("forecast_models").upsert({
+      name: modelConfiguration.name,
+      version: forecast.modelVersion,
+      configuration: modelConfiguration,
+      active: true,
+    }, { onConflict: "version" }).select("id").single();
     throwOnError(modelResult.error, "Unable to upsert forecast model");
     const forecastResult = await this.client.from("forecasts").insert({
       forecast_model_id: modelResult.data!.id,
@@ -269,7 +323,7 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
       predicted_window_end: forecast.predictedWindowEnd,
       data_cutoff: forecast.dataCutoff,
       feature_snapshot: forecast.features,
-      simulation_summary: { ...forecast.simulation, configurationHash: forecast.configurationHash, featureOrigins: forecast.featureOrigins, featureDetails: forecast.featureDetails },
+      simulation_summary: { ...forecast.simulation, configurationHash: forecast.configurationHash, featureOrigins: forecast.featureOrigins, featureDetails: forecast.featureDetails, policyModel: forecast.policyModel ?? null },
       evidence_post_ids: forecast.sourcePostIds,
       mode: "live",
     }).select("id").single();

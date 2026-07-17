@@ -11,7 +11,14 @@ export function versionedForecastContext(cutoff: string): ForecastContext {
     verifiedResets: verifiedLedger
       .filter(record => record.resetType !== "scheduled")
       .map(record => ({ occurredAt: record.eventAt, milestoneUsers: record.milestoneUsers, verified: true })),
-    milestoneObservations: verifiedLedger.map(record => ({ occurredAt: record.eventAt, milestoneUsers: record.milestoneUsers, verified: true })),
+    milestoneObservations: verifiedLedger.map(record => ({
+      occurredAt: record.eventAt,
+      milestoneUsers: record.milestoneUsers,
+      verified: true,
+      resetType: record.resetType === "full" || record.resetType === "banked" || record.resetType === "scheduled"
+        ? record.resetType
+        : "announcement_only",
+    })),
     historicalWindows: datasets.windows.windows
       .filter(window => Date.parse(window.eventAt) <= Date.parse(cutoff))
       .map(window => ({ eventAt: window.eventAt, verificationStatus: window.verificationStatus, featureVector: window.featureVector, resetFollowedWithinHorizon: window.resetFollowedWithinHorizon })),

@@ -1,5 +1,5 @@
 import type { Extraction } from "@/lib/extraction/schema";
-import { forecastFromEvidence } from "@/lib/forecasting";
+import { refreshCurrentForecast } from "@/lib/forecasting/current-refresh";
 import type { SocialPost, SocialSourceAdapter } from "@/lib/social/adapters";
 import type { ExtractionResult, IngestionReport, IngestionRepository } from "./types";
 import { createMilestoneCandidate } from "@/lib/milestones";
@@ -68,7 +68,6 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
     xResourcesConsumed += postsRead;
     const uniquePosts = [...new Map(batch.posts.slice(0, MAX_X_POSTS_PER_RUN).map(post => [post.id, post])).values()];
     const existing = await dependencies.repository.findExistingPostIds(uniquePosts.map(post => post.id));
-    let relevantEvidenceChanged = false;
     for (const post of uniquePosts) {
       if (existing.has(post.id)) continue;
       const localScreen = dependencies.localExtract(post.text);
@@ -90,16 +89,9 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
         latestVerifiedUsers,
       });
       if (candidate) await dependencies.repository.upsertMilestoneCandidate?.({ candidate, post: storedPost });
-      if (forecastImpact !== 0 && result.extraction.is_relevant && !result.extraction.requires_review) relevantEvidenceChanged = true;
     }
-    let forecastId: string | null = null;
-    if (relevantEvidenceChanged) {
-      const evidence = await dependencies.repository.loadForecastEvidence();
-      const cutoff = now().toISOString();
-      const context = await dependencies.repository.loadForecastContext?.();
-      const forecast = forecastFromEvidence(evidence, cutoff, dependencies.horizonHours ?? Number(process.env.FORECAST_HORIZON_HOURS ?? 36), undefined, undefined, context);
-      forecastId = await dependencies.repository.saveForecast({ ...forecast, mode: "live" });
-    }
+    const forecastCalculatedAt = now().toISOString();
+    const refresh = await refreshCurrentForecast({ repository: dependencies.repository, calculatedAt: forecastCalculatedAt, horizonHours: dependencies.horizonHours });
     const latestId = newestPostId(uniquePosts, batch.newestId);
     if (latestId) await dependencies.repository.updateLatestProcessedPostId(account.databaseId, latestId, now().toISOString());
     const completedAt = now().toISOString();
@@ -111,8 +103,12 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
       postsRead,
       postsInserted,
       postsAnalyzed,
-      forecastChanged: forecastId !== null,
-      forecastId,
+      forecastRecalculated: true,
+      forecastChanged: refresh.forecastChanged,
+      forecastSaveReason: refresh.forecastSaveReason,
+      forecastCalculatedAt,
+      forecastModelVersion: refresh.forecast.modelVersion,
+      forecastId: refresh.forecastId,
       durationMs: Math.max(0, now().getTime() - started.getTime()),
       completedAt,
       xResourcesConsumed,
