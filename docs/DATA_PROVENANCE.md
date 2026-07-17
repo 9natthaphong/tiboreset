@@ -1,7 +1,41 @@
 # Data provenance
 
-Each forecast retains its exact cutoff, source post IDs, extracted event IDs, feature snapshot, feature origins and derivation notes, model version, configuration hash, simulation seed/count, and contribution math. “Export forecast audit JSON” exports these fields and no secrets. Live raw X payloads are retained server-side only from the activation date onward. Demo fixtures are version-controlled in `src/data/demo.json` and are synthetic.
+## Live records
 
-Historical reset claims enter only through `source-manifest.json`, `verified-reset-ledger.json`, and `historical-signal-windows.json`. Every record carries a source URL/post ID when available, observed and event timestamps, category, reset type, verification notes/status, positive or negative window, and manual provenance. Cross-file source references are validated before idempotent import. LLM output is never accepted into this seed boundary.
+Every current forecast retains its exact cutoff, source post IDs, extracted event IDs, feature snapshot, feature origins and derivation notes, model version, configuration hash, simulation seed and count, probability interval, policy and discretionary branch summaries, and contribution math. The audit JSON export contains those fields and no secrets.
 
-Reviewed official market and operational context lives in `external-context-events.json` behind a strict Zod schema. Competitor records have forecast weight zero and are context only. An OpenAI Status event can affect usage-incident strength only when it is from the official status source, marked reviewed, and assigned an explicit human-reviewed weight.
+Live source posts enter through the official X API from the system activation date onward. The initial activation reads at most 10 posts. Later reads use `since_id`, deduplicate by platform post ID, and preserve the raw provider payload server-side for audit. Browser scraping, unofficial mirrors, and post-media expansions are not used. Cached account profile imagery comes from the monitored-account record.
+
+Candidate posts pass through a deterministic relevance screen before OpenAI. Strict extraction records preserve schema and model versions, fallback status, confidence, uncertainty, and review state. Ambiguous evidence cannot act as verified forecast evidence automatically.
+
+## Human-reviewed historical records
+
+Historical reset claims enter only through:
+
+- `src/data/source-manifest.json`;
+- `src/data/verified-reset-ledger.json`; and
+- `src/data/historical-signal-windows.json`.
+
+Every seed record carries a source URL and post ID when available, observation and event timestamps, category, reset type, verification status and notes, window polarity, and manual provenance. Cross-file references are schema-validated before idempotent import. LLM output is never accepted into or used to rewrite this seed boundary.
+
+The 3M-9M ledger represents verified official announcement records. Full, banked, scheduled, and announcement-only states remain distinct. An announcement timestamp is not presented as a verified execution timestamp.
+
+## Milestone state
+
+Historical seeds bootstrap the database. New milestone candidates are stored from live extracted evidence, deduplicated by source post, and assigned `extracted`, `needs_review`, `verified`, or `rejected` state. Public latest-milestone values and history derive from verified database records, not UI constants. A lower or ambiguous candidate cannot overwrite a higher verified milestone.
+
+The current versioned policy ends at the verified pledged 10M target. The system does not infer an 11M promise without a new verified commitment.
+
+## External context
+
+Reviewed official market and operational context lives in `external-context-events.json` behind a strict Zod schema. Competitor events have forecast weight zero and remain context only. An OpenAI Status event can affect usage-incident strength only when it comes from the official status source, is reviewed, and has an explicit configured weight.
+
+## Backtest publication boundary
+
+The one-month backtest is isolated from production tables. Public repository artifacts contain aggregate metrics, event-level derived results, rolling forecasts, and human-readable reports. Raw historical X acquisition data and extraction caches are local-only, gitignored, and intentionally excluded from the public submission.
+
+At each cutoff, the evaluator sees only posts, evidence, milestones, interval lengths, posterior outcomes, and operational records available at or before that time. Future outcomes are used only after the forecast has been frozen for scoring.
+
+## Demo data
+
+Demo fixtures are version-controlled and synthetic. The UI labels them Demo Data, Demo Posts, or Demo Email. They must not be presented as historical facts.

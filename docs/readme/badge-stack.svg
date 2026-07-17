@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="151" height="28" role="img" aria-label="Stack: Next.js and TypeScript">
+  <rect width="151" height="28" rx="3" fill="#101513"/>
+  <rect width="50" height="28" rx="3" fill="#3b433f"/>
+  <path fill="#3b433f" d="M47 0h6v28h-6z"/>
+  <g fill="#f3eee2" font-family="Arial,sans-serif" font-size="11" text-anchor="middle">
+    <text x="25" y="18">STACK</text><text x="100.5" y="18">NEXT.JS + TS</text>
+  </g>
+</svg>

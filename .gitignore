@@ -47,6 +47,10 @@ test-results/
 playwright-report/
 blob-report/
 
+# Private historical acquisition caches
+artifacts/backtests/**/raw-posts.json
+artifacts/backtests/**/extraction-cache.json
+
 # Local agent tooling
 .agents/
 skills-lock.json
