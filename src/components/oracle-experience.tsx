@@ -18,6 +18,7 @@ import { CinematicHero } from "./cinematic-hero";
 import { deriveMilestoneState } from "@/lib/milestones";
 import type { PublicBacktestSummary } from "@/lib/backtest-report";
 import { formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
+import { PublicVisitCounter } from "./public-visit-counter";
 
 const Charts = dynamic(() => import("./oracle-charts"), { ssr: false, loading: () => <div className="chart-loading">Loading forecast record…</div> });
 type Analog = { date: string; eventType: string; similarity: number; outcome: string; source: string; followed: boolean | null; forecastBefore?: number };
@@ -235,7 +236,7 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
 
     <details className="research-archive"><summary><span className="archive-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="archive-open-copy">OPEN TECHNICAL DETAILS</b><b className="archive-close-copy">CLOSE TECHNICAL DETAILS</b><small>Historical analogs, Time Machine, methodology and audit export</small></span><ChevronDown/></summary><div className="archive-content"><HistoricalMemory analogs={analogs}/><TimeMachine history={history} evidence={evidence} modelVersion={forecast.modelVersion}/><Methodology forecast={forecast}/><div className="full-data-lab-action"><p>Need the complete source and model record?</p><Link href="/lab/data" onClick={() => track("open_data_lab")}>Open Full Data Lab <span aria-hidden="true">→</span></Link></div></div></details>
 
-    <footer><span>SACRED FORECAST · RESET ORACLE</span><p>Unofficial project. Not affiliated with or endorsed by OpenAI or X.</p><nav aria-label="Footer links"><Link href="/privacy">Privacy</Link><Link href="/lab/data" onClick={() => track("open_data_lab")}>Open Data Lab →</Link></nav></footer>
+    <footer className="site-footer"><span className="site-footer-mark">SACRED FORECAST · RESET ORACLE</span><div className="site-footer-copy"><p className="site-footer-primary">Forecasting workflow uses public signals, milestone history, and GPT-5.6-assisted analysis.</p><p className="site-footer-disclaimer">Unofficial project. Not affiliated with or endorsed by OpenAI or X.</p></div><PublicVisitCounter enabled={forecast.mode === "live"}/><nav aria-label="Footer links"><Link href="/privacy">Privacy</Link><Link href="/lab/data" onClick={() => track("open_data_lab")}>Open Data Lab →</Link></nav></footer>
   </main>;
 }
 
