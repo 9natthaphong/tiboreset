@@ -19,6 +19,7 @@
   "dependencies": {
     "@react-email/components": "^1.0.12",
     "@supabase/supabase-js": "^2.110.6",
+    "@vercel/analytics": "^2.0.1",
     "gsap": "^3.15.0",
     "lucide-react": "^1.24.0",
     "motion": "^12.42.2",

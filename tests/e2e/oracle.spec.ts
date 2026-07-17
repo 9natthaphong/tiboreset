@@ -39,6 +39,9 @@ test("hero and range use the same forecast snapshot", async ({ page }) => {
   await expect(page.locator(".signal-ranking")).not.toContainText("milestone_proximity");
   const diagnosticSummary = page.locator(".advanced-diagnostics > summary");
   await expect(diagnosticSummary).toHaveCSS("cursor", "pointer");
+  await expect(page.locator(".advanced-diagnostics")).toHaveAttribute("open", "");
+  await diagnosticSummary.click();
+  await expect(page.locator(".advanced-diagnostics")).not.toHaveAttribute("open", "");
   await diagnosticSummary.click();
   await expect(page.getByText("Configuration hash")).toBeVisible();
 });

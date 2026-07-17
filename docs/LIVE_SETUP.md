@@ -29,3 +29,17 @@ Supply reviewed history separately through the three version-controlled `src/dat
 Confirmation links expire after `EMAIL_CONFIRMATION_EXPIRY_HOURS` (24 by default). Threshold alerts rearm only after probability falls ten points below the selected threshold. Complaints suppress all future delivery. Bounces are recorded and the subscription is held for review.
 
 The Resend Free plan is expected to allow 3,000 transactional emails per month and 100 per day. Each recipient counts as one email, and both confirmation and alert emails consume quota. These expectations are documented for operator planning only and are not hardcoded into application behavior.
+
+## Vercel Web Analytics
+
+1. Enable Web Analytics in the Vercel project dashboard.
+2. Deploy the root-layout `Analytics` component.
+3. Confirm that page views reach the Web Analytics dashboard.
+4. Create a restricted Vercel access token.
+5. Add `WEB_ANALYTICS_API_TOKEN` as a server-only environment variable.
+6. Add `WEB_ANALYTICS_PROJECT_ID` and `WEB_ANALYTICS_TEAM_ID`.
+7. Set `SHOW_PUBLIC_PAGE_VIEWS=true` only after a supported aggregate API integration is available.
+8. Redeploy.
+9. Verify that the footer displays a cached monthly page-view count before treating the public metric as enabled.
+
+Page-view and privacy-safe custom interaction tracking is active through `@vercel/analytics`. Query strings are removed before analytics events are sent, and `/control-room` analytics are suppressed. The optional public monthly counter remains disabled because the installed official package does not define a supported aggregated visits response contract. Do not implement a browser-side Vercel API call or expose the token. If a future analytics or advertising provider introduces non-essential cookies, add an appropriate consent mechanism before that provider loads.

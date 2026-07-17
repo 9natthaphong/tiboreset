@@ -326,7 +326,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
       <div className="hero-story">
         <div className="hero-story-title">
           <h1 aria-label="WILL TIBO RESET?"><span>WILL TIBO</span><em>RESET?</em></h1>
-          <p className="hero-premise">Know when to spend, save, or queue your Codex work.</p>
+          <p className="hero-premise">Forecast the reset. Plan the next 36 hours of coding.</p>
         </div>
         <div className="hero-story-probability">
           <strong data-testid="hero-probability">{percentage(forecast.probability)}<small>%</small></strong>

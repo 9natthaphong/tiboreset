@@ -1,13 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { track } from "@vercel/analytics";
 import { useMemo, useState } from "react";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Forecast } from "@/lib/forecasting";
 import type { HistoryPoint, ResetHistoryItem } from "@/lib/public-data-types";
 
-const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), { ssr: false });
+const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), { ssr: false, loading: () => <div className="diagnostics-loading" role="status">Loading full model record…</div> });
 
 type Range = "24H" | "7D" | "ALL";
 type ForecastView = "movement" | "signals" | "range";
@@ -60,7 +61,7 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
   const [trendView, setTrendView] = useState<TrendView>("live");
   const [focused, setFocused] = useState<HistoryPoint | null>(null);
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(true);
   const latestTime = Date.parse(history.at(-1)?.time ?? forecast.generatedAt);
   const filtered = useMemo(() => history.filter(point => {
     if (range === "ALL") return true;
@@ -84,6 +85,7 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
     technicalName: item.featureName,
     explanation: contributionExplanations[item.featureName] ?? "This factor changes the deterministic model estimate using its configured expert-prior coefficient.",
   }));
+  const rankedContributions = [...forecast.contributions].sort((a, b) => Math.abs(b.logOddsContribution) - Math.abs(a.logOddsContribution)).slice(0, 7);
   const maxContribution = Math.max(...contribution.map(item => Math.abs(item.value)), 0.01);
   const first = history[0];
   const last = history.at(-1);
@@ -186,9 +188,9 @@ export default function Charts({ forecast, history, resetHistory }: { forecast: 
       </section>}
     </div>
 
-    <details className="advanced-diagnostics" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)}>
-      <summary><span className="diagnostic-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="diagnostic-open-copy">OPEN ADVANCED DIAGNOSTICS</b><b className="diagnostic-close-copy">CLOSE ADVANCED DIAGNOSTICS</b><small>Histogram, calibration, coefficients and audit details</small></span><ChevronDown size={18}/></summary>
-      {diagnosticsOpen && <AdvancedDiagnostics forecast={forecast}/>} 
+    <details className="advanced-diagnostics" open={diagnosticsOpen} onToggle={event => setDiagnosticsOpen(event.currentTarget.open)} data-testid="advanced-diagnostics">
+      <summary aria-expanded={diagnosticsOpen} onClick={() => { if (!diagnosticsOpen) track("expand_model_record"); }}><span className="diagnostic-toggle-icon" aria-hidden="true"><i>+</i><b>−</b></span><span><b className="diagnostic-open-copy">OPEN FULL MODEL RECORD</b><b className="diagnostic-close-copy">COLLAPSE MODEL RECORD</b><small>Model summary, feature ranking, coefficients and audit details</small></span><ChevronDown size={18}/></summary>
+      {diagnosticsOpen && <div className="diagnostics-disclosure"><section className="model-summary" aria-labelledby="model-summary-title"><header><span>MODEL RECORD</span><h3 id="model-summary-title">Current forecast at a glance</h3></header><dl><div><dt>Current probability</dt><dd>{Math.round(forecast.probability * 100)}%</dd></div><div><dt>Likely interval</dt><dd>{Math.round(forecast.credibleIntervalLow * 100)}–{Math.round(forecast.credibleIntervalHigh * 100)}%</dd></div><div><dt>Model version</dt><dd>{forecast.modelVersion}</dd></div><div><dt>Forecast horizon</dt><dd>{forecast.horizonHours} hours</dd></div><div><dt>Simulations</dt><dd>{forecast.simulation.count.toLocaleString()}</dd></div><div><dt>Data cutoff</dt><dd>{new Date(forecast.dataCutoff).toLocaleString()}</dd></div><div><dt>Evidence count</dt><dd>{forecast.evidenceIds.length}</dd></div></dl><div className="model-summary-ranking"><h4>Feature contribution ranking</h4><ol>{rankedContributions.map(item => <li key={item.featureName}><span>{contributionLabels[item.featureName] ?? item.label}</span><b className={item.logOddsContribution < 0 ? "negative" : "positive"}>{item.logOddsContribution > 0 ? "+" : ""}{item.logOddsContribution.toFixed(2)}</b></li>)}</ol></div></section><AdvancedDiagnostics forecast={forecast}/></div>}
     </details>
   </div>;
 }
