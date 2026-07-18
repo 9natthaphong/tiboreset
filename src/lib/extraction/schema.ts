@@ -5,6 +5,12 @@ export const eventTypes = [
   "capacity_signal", "limit_policy_change", "product_launch", "promotion", "community_poll", "general_codex_update", "irrelevant",
 ] as const;
 
+export const structuredSignalTypes = [
+  "irrelevant", "general_update", "operator_intervention", "operational_work_underway", "reset_hint",
+  "milestone_progress", "milestone_commitment", "limit_policy_change", "near_term_reset_commitment",
+  "reset_confirmation", "negative_or_delaying_signal",
+] as const;
+
 export const ExtractionSchema = z.object({
   is_relevant: z.boolean(),
   relevance_reason: z.string(),
@@ -24,6 +30,12 @@ export const ExtractionSchema = z.object({
   uncertainties: z.array(z.string()),
   extraction_confidence: z.number().min(0).max(1),
   requires_review: z.boolean(),
+  signal_type: z.enum(structuredSignalTypes),
+  operational_relevance: z.enum(["none", "low", "moderate", "high"]),
+  reset_intent_strength: z.number().min(0).max(1),
+  operator_intervention_strength: z.number().min(0).max(1),
+  time_immediacy: z.enum(["none", "low", "moderate", "high", "immediate"]),
+  source_authority: z.enum(["monitored_official", "official", "unknown"]),
 }).strict();
 
 export const ExtractionJsonSchema = z.toJSONSchema(ExtractionSchema, { target: "draft-7" });

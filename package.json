@@ -18,7 +18,10 @@
     "seed:history": "tsx scripts/seed-history.ts",
     "backfill:ambiguity": "tsx scripts/backfill-ambiguity.ts",
     "backtest:month": "tsx scripts/backtest-month.ts",
-    "backtest:month:v2": "tsx scripts/backtest-month-v2.ts"
+    "backtest:month:v2": "tsx scripts/backtest-month-v2.ts",
+    "hybrid:inspect-current": "tsx scripts/hybrid-inspect-current.ts",
+    "find:x-post": "tsx scripts/find-x-post.ts",
+    "reprocess:x-post": "tsx scripts/reprocess-x-post.ts"
   },
   "dependencies": {
     "@react-email/components": "^1.0.12",

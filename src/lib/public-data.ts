@@ -15,6 +15,9 @@ import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, Publi
 import { buildMilestoneSeedRows } from "@/lib/historical-data";
 import { deriveMilestoneState, type MilestoneEvent } from "@/lib/milestones";
 import { forecastFreshness } from "@/lib/forecasting/current-refresh";
+import { loadCanonicalHybridSnapshot, type LoadedCanonicalHybridSnapshot } from "@/lib/canonical-hybrid-snapshot";
+import { calculateHybridLikelihood, type HybridLikelihood, type HybridResetEvent, type HybridSignalInput } from "@/lib/hybrid-likelihood";
+import { localExtract } from "@/lib/extraction/local";
 
 const eventTypes = ["explicit_reset_confirmation","reset_hint","milestone_commitment","milestone_progress","usage_incident","capacity_signal","limit_policy_change","product_launch","promotion","community_poll","general_codex_update","irrelevant"] as const;
 const eventTypeSchema = z.enum(eventTypes);
@@ -55,8 +58,61 @@ function serverClient(): SupabaseClient | null {
 export { parseLatestPostsLimit } from "@/lib/latest-posts";
 
 function demoPosts(limit: number): LatestPostsResponse {
-  return createDemoLatestPosts(state().evidence, currentForecast().dataCutoff, limit);
+  const response = createDemoLatestPosts(state().evidence, currentForecast().dataCutoff, limit);
+  return { ...response, posts: response.posts.map(post => ({ ...post, signalType: post.eventType === "explicit_reset_confirmation" ? "reset_confirmation" : post.eventType === "irrelevant" ? "irrelevant" : "general_update", hybridContributionPoints: 0, probabilityCounterfactualDeltaPercentagePoints: null, signalBucket: post.isRelevant ? "forecast_moving" : "screened_out", signalReason: post.isRelevant ? "Demo evidence fixture." : "Demo post screened as unrelated.", recencyFactor: 1, exclusionReason: post.isRelevant ? null : "irrelevant" })) };
 }
+
+function demoHybrid(): HybridLikelihood {
+  const forecast = currentForecast();
+  const resetEvents: HybridResetEvent[] = demoResetHistory().filter(item => item.type === "full" || item.type === "banked").map(item => ({ id: item.id, occurredAt: item.date, resetType: item.type as "full" | "banked", verified: true, sourcePostId: item.sourcePostId, sourceUrl: item.sourceUrl }));
+  const signals: HybridSignalInput[] = state().evidence.map(item => {
+    const extraction = localExtract(item.excerpt);
+    return { id: item.id, postId: item.postId, text: item.excerpt, postedAt: item.postedAt, sourceUrl: item.url, verificationStatus: item.verified ? "verified" : extraction.requires_review ? "needs_review" : "structured", signal: { signalType: extraction.signal_type, operationalRelevance: extraction.operational_relevance, resetIntentStrength: extraction.reset_intent_strength, operatorInterventionStrength: extraction.operator_intervention_strength, timeImmediacy: extraction.time_immediacy, sourceAuthority: "monitored_official", extractionConfidence: item.confidence, requiresReview: extraction.requires_review, uncertainties: extraction.uncertainties, resetConfirmed: extraction.reset_confirmed, resetType: extraction.reset_type } };
+  });
+  return calculateHybridLikelihood({ forecast, resetEvents, signals, now: forecast.dataCutoff });
+}
+
+function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit = 20): LatestPostsResponse {
+  const contributions = new Map([...snapshot.hybrid.activeSignals, ...snapshot.hybrid.excludedSignals].map(item => [item.postId, item]));
+  return {
+    mode: "live",
+    lastUpdatedAt: snapshot.lastUpdatedAt,
+    account: snapshot.account,
+    posts: snapshot.posts.slice(0, limit).map(post => {
+      const contribution = contributions.get(post.platform_post_id);
+      const event = post.extraction;
+      const metrics = post.public_metrics ?? {};
+      const signal = post.signal;
+      return {
+        id: post.platform_post_id,
+        text: post.text,
+        url: post.post_url ?? `https://x.com/i/status/${post.platform_post_id}`,
+        postedAt: post.posted_at,
+        isRelevant: post.is_relevant === true,
+        eventType: (event?.event_type ?? "irrelevant") as EventType,
+        extractionConfidence: event?.extraction_confidence ?? signal.signal.extractionConfidence,
+        forecastImpact: 0,
+        verified: signal.verificationStatus === "verified",
+        ambiguous: signal.signal.requiresReview,
+        needsReview: signal.signal.requiresReview,
+        wasAnalyzed: Boolean(event),
+        metrics: { likes: asMetric(metrics.like_count), reposts: asMetric(metrics.retweet_count), replies: asMetric(metrics.reply_count) },
+        signalType: signal.signal.signalType,
+        hybridContributionPoints: contribution?.appliedPoints ?? 0,
+        probabilityCounterfactualDeltaPercentagePoints: null,
+        signalBucket: contribution?.bucket ?? "screened_out",
+        signalReason: contribution?.reason ?? "No active structured signal.",
+        recencyFactor: contribution?.recencyFactor ?? 0,
+        exclusionReason: contribution?.exclusionReason ?? "irrelevant",
+        resetType: signal.signal.signalType === "reset_confirmation" && (signal.signal.resetType === "full" || signal.signal.resetType === "banked") ? signal.signal.resetType : null,
+        resolvedAt: contribution?.exclusionReason === "previous_cycle_resolved" ? post.posted_at : null,
+        cycleStatus: contribution?.exclusionReason === "previous_cycle_resolved" ? "previous_cycle_resolved" : contribution?.exclusionReason === "before_cycle_start" ? "historical" : "active_cycle",
+      } satisfies LatestPost;
+    }),
+  };
+}
+
+const asMetric = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : 0;
 
 function demoHistory(): HistoryPoint[] {
   const evidence = state().evidence;
@@ -150,7 +206,7 @@ export async function getLatestPosts(limit = 6): Promise<LatestPostsResponse> {
   const parsedLimit = parseLatestPostsLimit(String(limit));
   const client = configuredMode() === "live" ? serverClient() : null;
   if (!client) return demoPosts(parsedLimit);
-  try { return await livePosts(client, parsedLimit); } catch { return demoPosts(parsedLimit); }
+  try { return latestPostsFromCanonical(await loadCanonicalHybridSnapshot(client), parsedLimit); } catch { return demoPosts(parsedLimit); }
 }
 
 function labelForFeature(featureName: string): string {
@@ -226,13 +282,29 @@ async function liveEvidence(client: SupabaseClient, sourcePostIds: string[]): Pr
   }).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
 }
 
-function historyFromForecasts(forecasts: Forecast[], evidence: Evidence[]): HistoryPoint[] {
-  return forecasts.map((forecast, index) => {
-    const addedSourceId = forecast.sourcePostIds.find(id => !forecasts[index - 1]?.sourcePostIds.includes(id));
+function historyFromForecasts(forecasts: Forecast[], evidence: Evidence[], resolvedReset: HybridResetEvent | null = null, currentForecast?: Forecast): HistoryPoint[] {
+  const lastStored = forecasts.at(-1);
+  const series = currentForecast && (!lastStored || Date.parse(currentForecast.generatedAt) > Date.parse(lastStored.generatedAt) + 1_000)
+    ? [...forecasts, currentForecast]
+    : forecasts;
+  const resolvedIndex = resolvedReset
+    ? series.findIndex(forecast => resolvedReset.sourceRecordId
+      ? forecast.sourcePostIds.includes(resolvedReset.sourceRecordId)
+      : Date.parse(forecast.generatedAt) >= Date.parse(resolvedReset.occurredAt) && forecast.probability >= .98)
+    : -1;
+  return series.map((forecast, index) => {
+    const addedSourceId = forecast.sourcePostIds.find(id => !series[index - 1]?.sourcePostIds.includes(id));
     const item = evidence.find(candidate => candidate.postId === addedSourceId) ?? evidence[Math.min(index, evidence.length - 1)];
-    const previous = forecasts[index - 1];
-    return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: item?.excerpt, eventType: item?.eventType, evidencePostId: item?.postId, verified: item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect };
+    const previous = series[index - 1];
+    const resolved = index === resolvedIndex ? resolvedReset : null;
+    const isCurrent = currentForecast?.id === forecast.id;
+    return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: resolved ? "RESET RELEASED" : isCurrent && resolvedIndex >= 0 ? "Current next-cycle estimate" : item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: resolved?.sourceText ?? (isCurrent && resolvedIndex >= 0 ? "Cutoff-safe estimate using evidence posted after the latest reset." : item?.excerpt), eventType: resolved ? "explicit_reset_confirmation" : item?.eventType, evidencePostId: resolved?.sourcePostId ?? item?.postId, verified: resolved ? true : item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect, cyclePhase: resolvedIndex >= 0 && index > resolvedIndex ? "active" : "previous", resolvedResetAt: resolved?.occurredAt, resolvedResetSource: resolved?.sourceUrl, resolvedResetType: resolved?.resetType };
   });
+}
+
+function resolvedResetHistoryItem(reset: HybridResetEvent | null): ResetHistoryItem | null {
+  if (!reset) return null;
+  return { id: `resolved-${reset.id}`, date: reset.occurredAt, type: reset.resetType, reason: "official_completed_reset", description: `Official completed ${reset.resetType} usage reset announcement.`, sourceUrl: reset.sourceUrl, included: true, verificationBadge: "verified", sourceAccount: "@thsottiaux", verificationStatus: "verified", historicalSource: "live", sourcePostId: reset.sourcePostId };
 }
 
 async function liveResetHistory(client: SupabaseClient): Promise<ResetHistoryItem[]> {
@@ -289,14 +361,15 @@ export async function getPublicSnapshot(): Promise<PublicSnapshot> {
   const client = configuredMode() === "live" ? serverClient() : null;
   if (client) {
     try {
+      const canonical = await loadCanonicalHybridSnapshot(client);
       const forecasts = await liveForecasts(client);
-      const forecast = forecasts.at(-1)!;
-      const evidence = await liveEvidence(client, forecast.sourcePostIds);
-      const [latestPosts, resetHistory, milestoneState, health] = await Promise.all([livePosts(client, 20), liveResetHistory(client), liveMilestoneState(client), getPublicHealth()]);
-      return { forecast, history: historyFromForecasts(forecasts, evidence), evidence, latestPosts, resetHistory: mergeVerifiedResetHistory(resetHistory), milestoneState, historicalDataset, externalContextEvents, health };
+      const [resetHistory, milestoneState, health] = await Promise.all([liveResetHistory(client), liveMilestoneState(client), getPublicHealth()]);
+      const resolvedHistory = resolvedResetHistoryItem(canonical.hybrid.confirmation);
+      return { forecast: canonical.forecast, history: historyFromForecasts(forecasts, canonical.evidence, canonical.hybrid.confirmation, canonical.forecast), evidence: canonical.evidence, latestPosts: latestPostsFromCanonical(canonical, 20), resetHistory: mergeVerifiedResetHistory(resolvedHistory ? [resolvedHistory, ...resetHistory] : resetHistory), milestoneState, historicalDataset, externalContextEvents, health, hybrid: canonical.hybrid, hybridStatus: "available", canonicalCutoff: canonical.cutoff };
     } catch { /* Safe, clearly labelled Demo fallback below. */ }
   }
-  return { forecast: { ...currentForecast(), mode: "demo" }, history: demoHistory(), evidence: state().evidence, latestPosts: demoPosts(20), resetHistory: demoResetHistory(), milestoneState: seedMilestoneState(), historicalDataset, externalContextEvents, health: demoHealth() };
+  const mode = configuredMode();
+  return { forecast: { ...currentForecast(), mode: "demo" }, history: demoHistory(), evidence: state().evidence, latestPosts: demoPosts(20), resetHistory: demoResetHistory(), milestoneState: seedMilestoneState(), historicalDataset, externalContextEvents, health: demoHealth(), hybrid: mode === "demo" ? demoHybrid() : null, hybridStatus: mode === "demo" ? "available" : "unavailable", canonicalCutoff: mode === "demo" ? currentForecast().dataCutoff : null };
 }
 
 export async function getForecastHistory(): Promise<Forecast[]> {

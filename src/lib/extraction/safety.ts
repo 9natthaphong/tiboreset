@@ -6,6 +6,8 @@ const conditionalPattern = /(^|[.!?]\s*)\s*(if|unless)\b|\bwould\s+(?:reset|rest
 const questionPattern = /\?|\b(?:will|would|could|can)\s+(?:you|we|they)\s+(?:reset|restore|refresh)\b/i;
 const operationalObjectPattern = /\b(?:usage|weekly|rate)?\s*limits?\b|\bquota\b|\busage\b/i;
 const commitmentPattern = /\b(?:we|i)\s+(?:will|shall|plan to|intend to|are going to)\s+(?:reset|restore|refresh)\b|\b(?:usage|weekly|rate)\s*limits?\s+(?:will|shall|are going to)\s+be\s+(?:reset|restored|refreshed)\b/i;
+const futureResetPattern = /\b(?:will|tomorrow|soon|scheduled|plan(?:ned)?|going to|later)\b/i;
+const completedResetPattern = /\b(?:usage|weekly|rate)\s*limits?\s+(?:have|has|were|are|have now|are now)\s+(?:been\s+)?(?:reset|restored|refreshed)\b|\b(?:usage|quota|limits?)\s+(?:has|have|was|were)\s+(?:been\s+)?(?:reset|restored|refreshed)\b|\b(?:reset|banked reset)\s+(?:was|has been|is now)?\s*(?:added|granted|issued|completed|restored)\b|\benjoy\s+(?:the\s+)?reset\s+(?:usage|weekly|rate)?\s*limits?\b|\bwe\s+(?:have\s+)?(?:reset|restored|refreshed)\s+(?:usage|weekly|rate)?\s*limits?\b/i;
 
 export function hasAmbiguousResetLanguage(text: string): boolean {
   return playfulPattern.test(text) || uncertainPattern.test(text) || conditionalPattern.test(text) || questionPattern.test(text);
@@ -13,6 +15,10 @@ export function hasAmbiguousResetLanguage(text: string): boolean {
 
 export function hasCredibleOperationalResetCommitment(text: string): boolean {
   return !hasAmbiguousResetLanguage(text) && operationalObjectPattern.test(text) && commitmentPattern.test(text);
+}
+
+export function hasExplicitCompletedOperationalReset(text: string): boolean {
+  return !hasAmbiguousResetLanguage(text) && !futureResetPattern.test(text) && completedResetPattern.test(text);
 }
 
 export function enforceExtractionSafety(text: string, extraction: Extraction): Extraction {

@@ -15,6 +15,14 @@ Official X API
 
 GPT-5.6 extracts structured, reviewable evidence through the OpenAI Responses API. It does not calculate the probability. Reset Oracle v2 owns the final calculation in pure TypeScript.
 
+## Canonical current snapshot
+
+The current public state uses a read-only derivation architecture. `loadCanonicalHybridSnapshot` selects one cutoff from the latest successful forecast calculation, then loads the monitored account, stored posts, latest extractions, verified reset records, milestone records, and the latest persisted forecast reference. One pure builder recalculates Reset Oracle v2 and Sacred Likelihood from that same cutoff-safe record set.
+
+The homepage, cinematic hero, forecast views, Latest Signals, `/api/hybrid/current`, the read-only inspector, and Data Lab all consume this canonical snapshot. A completed full or banked reset found in an official stored post is deterministically validated before it can become the newest cycle boundary. It immediately resolves the previous forecast and starts the next cycle at 30. Evidence at or before the boundary is excluded, the completed confirmation contributes zero to the active signal score, and Reset Oracle v2 is recalculated from cutoff-safe post-reset evidence.
+
+Hybrid state is not persisted in a separate table for this implementation. `persistedHybridScore: null` therefore means "derived from the canonical stored record set," not zero. If that derivation is unavailable, the Live hybrid state is reported as unavailable rather than reconstructed independently by a page or labeled Live from a stale fallback. Current-state routes use `no-store`; forecast history remains the stored, auditable Reset Oracle timeline.
+
 ## Runtime boundaries
 
 The Next.js App Router public route reads the latest stored forecast and lazy-loads below-the-fold visualizations. Demo state is server-local and resettable; Live repositories map the same domain records to Supabase. Supabase Realtime is the primary forecast update path. When Realtime is unavailable, the visible-tab fallback refreshes every five minutes, refreshes on focus, applies exponential error backoff, and prevents overlapping requests.

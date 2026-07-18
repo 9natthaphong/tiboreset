@@ -8,6 +8,10 @@ Live source posts enter through the official X API from the system activation da
 
 Candidate posts pass through a deterministic relevance screen before OpenAI. Strict extraction records preserve schema and model versions, fallback status, confidence, uncertainty, and review state. Ambiguous evidence cannot act as verified forecast evidence automatically.
 
+For the current public snapshot, a stored extraction is not trusted as a completed reset solely because of its label. The canonical builder also requires the monitored official account, full or banked reset type, no review flag, confirmation-safe confidence, and deterministic completed operational language in the stored post text. Derived confirmation state records its source post, extraction version, verification method, and whether the source is synchronized into `known_reset_events` or `milestone_events`.
+
+The current hybrid score is derived read-only from the same cutoff, calibrated forecast context, reset history, and evidence used by the public API and Data Lab. It is not a page-local estimate and is not written into the calibrated forecast row. The latest persisted forecast ID and probability remain attached as an audit reference. Failure to build the canonical Live snapshot produces an unavailable state rather than a fabricated hybrid value.
+
 ## Human-reviewed historical records
 
 Historical reset claims enter only through:

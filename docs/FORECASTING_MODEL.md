@@ -99,3 +99,11 @@ See the [full v2 report](../artifacts/backtests/2026-06-17_2026-07-17/v2/MODEL_V
 | 98%+ | Confirmed |
 
 These are communication labels, not accuracy claims.
+
+## Live Reset Likelihood state boundary
+
+Sacred Likelihood (`sacred-likelihood-1.0.0`) is a separate operational score. In a normal cycle it combines a 30-point baseline with monotonic cycle pressure, a cooldown-gated contribution from Reset Oracle v2, capped and decayed structured signals, and negative evidence. Normal values are clamped to 30-94.
+
+A verified official completed full or banked reset immediately closes the previous forecast cycle. Its timestamp becomes `cycleStartAt`, `hybridState` becomes `new_cycle`, and the active Live Reset Likelihood starts at exactly 30. The completed confirmation is retained as a resolved event but contributes zero to current `signalPoints`; all evidence at or before the new boundary is excluded.
+
+The calibrated Reset Oracle v2 probability remains a separate result. The resolved 98% confirmation forecast stays in the stored audit history, while the active probability is rebuilt from new-cycle, cutoff-safe evidence. The public trend marks the reset release and does not connect the resolved point to a fabricated historical hybrid series.

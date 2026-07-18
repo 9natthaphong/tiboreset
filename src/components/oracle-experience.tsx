@@ -6,7 +6,7 @@ import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { motion } from "motion/react";
 import { track } from "@vercel/analytics";
-import { Bell, CheckCircle2, ChevronDown, Clock3, Database, ExternalLink, Eye, Mail, Menu, Radio, ShieldCheck, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, Database, ExternalLink, Eye, Menu, Radio, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -17,12 +17,13 @@ import { getUsageGuidance } from "@/lib/usage-guidance";
 import { CinematicHero } from "./cinematic-hero";
 import { deriveMilestoneState } from "@/lib/milestones";
 import type { PublicBacktestSummary } from "@/lib/backtest-report";
-import { formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
+import { formatResetEventTimes, formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
 import { PublicVisitCounter } from "./public-visit-counter";
+import type { HybridLikelihood } from "@/lib/hybrid-likelihood";
 
 const Charts = dynamic(() => import("./oracle-charts"), { ssr: false, loading: () => <div className="chart-loading">Loading forecast record…</div> });
 type Analog = { date: string; eventType: string; similarity: number; outcome: string; source: string; followed: boolean | null; forecastBefore?: number };
-type Props = { initialForecast: Forecast; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; milestoneState: PublicMilestoneState; historicalDataset: HistoricalDatasetSummary; externalContextEvents: ExternalContextEvent[]; health: PublicHealth; analogs: Analog[]; renderedAt: string; emailAlertsConfigured: boolean; evidenceExtractionModel: string | null; backtestSummary: PublicBacktestSummary | null };
+type Props = { initialForecast: Forecast; initialHybrid: HybridLikelihood | null; hybridStatus: "available" | "unavailable"; evidence: Evidence[]; history: HistoryPoint[]; latestPosts: LatestPostsResponse; resetHistory: ResetHistoryItem[]; milestoneState: PublicMilestoneState; historicalDataset: HistoricalDatasetSummary; externalContextEvents: ExternalContextEvent[]; health: PublicHealth; analogs: Analog[]; renderedAt: string; evidenceExtractionModel: string | null; backtestSummary: PublicBacktestSummary | null };
 
 const formatTimestamp = formatUtcTimestamp;
 const formatDate = formatUtcShortDate;
@@ -34,16 +35,10 @@ const relativeTime = (value: string, now: string) => {
   if (hours < 24) return `${hours} hr ago`;
   return `${Math.floor(hours / 24)}d ago`;
 };
-const impactLabel = (impact: number) => impact > 0 ? `+${impact} pts` : impact < 0 ? `${impact} pts` : "No forecast impact";
-const historyFromForecasts = (forecasts: Forecast[], evidence: Evidence[]): HistoryPoint[] => forecasts.map((forecast, index) => {
-  const previous = forecasts[index - 1];
-  const newPostId = forecast.sourcePostIds.find(id => !previous?.sourcePostIds.includes(id));
-  const item = evidence.find(candidate => candidate.postId === newPostId) ?? evidence[Math.min(index, evidence.length - 1)];
-  return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: item?.excerpt, eventType: item?.eventType, evidencePostId: item?.postId, verified: item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect };
-});
-
-export function OracleExperience({ initialForecast, evidence: initialEvidence, history: initialHistory, latestPosts: initialPosts, resetHistory: initialResetHistory, milestoneState, historicalDataset, externalContextEvents, health: initialHealth, analogs, renderedAt, emailAlertsConfigured, evidenceExtractionModel, backtestSummary }: Props) {
+export function OracleExperience({ initialForecast, initialHybrid, hybridStatus: initialHybridStatus, evidence: initialEvidence, history: initialHistory, latestPosts: initialPosts, resetHistory: initialResetHistory, milestoneState, historicalDataset, externalContextEvents, health: initialHealth, analogs, renderedAt, evidenceExtractionModel, backtestSummary }: Props) {
   const [forecast, setForecast] = useState(initialForecast);
+  const [hybrid, setHybrid] = useState(initialHybrid);
+  const [hybridStatus, setHybridStatus] = useState(initialHybridStatus);
   const [evidence, setEvidence] = useState(initialEvidence);
   const [history, setHistory] = useState(initialHistory);
   const [posts, setPosts] = useState(initialPosts);
@@ -51,8 +46,8 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
   const [health, setHealth] = useState(initialHealth);
   const [referenceTime, setReferenceTime] = useState(renderedAt);
   const [showAllPosts, setShowAllPosts] = useState(false);
+  const [signalTab, setSignalTab] = useState<"forecast_moving" | "screened_out">("forecast_moving");
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
-  const [submitted, setSubmitted] = useState(false);
   const [updated, setUpdated] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const realtimeConnected = useRef(false);
@@ -65,8 +60,9 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
   const previousProbability = history.at(-2)?.probability ?? Math.round(forecast.probability * 100);
   const currentProbability = Math.round(forecast.probability * 100);
   const trend = currentProbability > previousProbability ? "Rising" : currentProbability < previousProbability ? "Falling" : "Steady";
-  const confirmed = forecast.features.explicit_reset_confirmation > .9;
-  const guidance = getUsageGuidance(forecast.probability, confirmed);
+  const resetReleased = hybrid?.eventResolutionStatus === "resolved" && Boolean(hybrid.confirmation);
+  const guidance = getUsageGuidance(hybrid ? hybrid.hybridScore / 100 : forecast.probability, false);
+  const latestResetTimes = hybrid?.confirmation ? formatResetEventTimes(hybrid.confirmation.occurredAt) : null;
   const currentMilestoneState = useMemo<PublicMilestoneState>(() => {
     const events = resetHistory.filter(item => item.milestoneUsers && item.sourcePostId && item.sourceUrl && item.denominator).map(item => ({ sourcePostId: item.sourcePostId!, sourceUrl: item.sourceUrl!, sourceAccount: item.sourceAccount ?? "@thsottiaux", reportedActiveUsers: item.milestoneUsers!, denominator: item.denominator!, resetType: (["full", "banked", "scheduled", "announcement_only"].includes(item.type) ? item.type : "announcement_only") as "full" | "banked" | "scheduled" | "announcement_only", announcedAt: item.date, executionAt: item.type === "full" || item.type === "banked" ? item.date : null, verificationStatus: "verified" as const, verificationMethod: "public_snapshot", rejectionReason: null }));
     if (!events.length) return milestoneState;
@@ -82,22 +78,20 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
     const refresh = (async () => {
       try {
         const responses = await Promise.all([
-          fetch("/api/forecast/current", { cache: "no-store" }),
-          fetch("/api/forecast/history", { cache: "no-store" }),
-          fetch("/api/evidence", { cache: "no-store" }),
-          fetch("/api/posts/latest?limit=20", { cache: "no-store" }),
-          fetch("/api/reset-history", { cache: "no-store" }),
+          fetch("/api/hybrid/current", { cache: "no-store" }),
           fetch("/api/health", { cache: "no-store" }),
         ]);
         if (responses.some(response => !response.ok)) throw new Error("Public refresh unavailable");
-        const [forecastJson, historyJson, evidenceJson, postsJson, resetJson, healthJson] = await Promise.all(responses.map(response => response.json()));
-        const nextForecast = forecastJson.data as Forecast;
-        const nextEvidence = evidenceJson.data as Evidence[];
+        const [canonicalJson, healthJson] = await Promise.all(responses.map(response => response.json()));
+        const nextForecast = canonicalJson.forecast as Forecast;
+        const nextEvidence = canonicalJson.evidence as Evidence[];
         setForecast(nextForecast);
+        setHybrid(canonicalJson.hybrid as HybridLikelihood | null);
+        setHybridStatus(canonicalJson.status === "available" ? "available" : "unavailable");
         setEvidence(nextEvidence);
-        setHistory(historyFromForecasts(historyJson.data as Forecast[], nextEvidence));
-        setPosts(postsJson as LatestPostsResponse);
-        setResetHistory(resetJson.data as ResetHistoryItem[]);
+        setHistory(canonicalJson.history as HistoryPoint[]);
+        setPosts(canonicalJson.latestPosts as LatestPostsResponse);
+        setResetHistory(canonicalJson.resetHistory as ResetHistoryItem[]);
         setHealth(healthJson as PublicHealth);
         setReferenceTime(new Date().toISOString());
         refreshFailures.current = 0;
@@ -148,14 +142,6 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
     return () => { if (pollTimer) window.clearTimeout(pollTimer); document.removeEventListener("visibilitychange", refreshWhenVisible); window.removeEventListener("focus", refreshWhenVisible); main?.setAttribute("data-refresh-ready", "false"); cleanupRealtime(); };
   }, [forecast.mode, refreshPublicData]);
 
-  const subscribe = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const threshold = data.get("threshold");
-    const response = await fetch("/api/subscriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: data.get("email"), probabilityThreshold: threshold === "confirmed" ? null : Number(threshold), notifyConfirmedReset: true, notifyForecastReversal: false, privacyAccepted: true }) });
-    if (response.ok) setSubmitted(true);
-  };
-
   useLayoutEffect(() => {
     const main = mainRef.current;
     if (!main) return;
@@ -194,11 +180,21 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
     return () => context.revert();
   }, []);
 
+  const movingPosts = posts.posts.filter(post => post.signalBucket === "forecast_moving");
+  const screenedPosts = posts.posts.filter(post => post.signalBucket !== "forecast_moving");
+  const selectedPosts = signalTab === "forecast_moving" ? movingPosts : screenedPosts;
+  const onSignalTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const next = signalTab === "forecast_moving" ? "screened_out" : "forecast_moving";
+    setSignalTab(event.key === "Home" ? "forecast_moving" : event.key === "End" ? "screened_out" : next);
+  };
+
   return <main ref={mainRef} data-refresh-ready="false">
     <header className="topbar sacred-nav" aria-hidden="true"><a className="wordmark" href="#top"><span>SF</span><b>SACRED FORECAST</b><small>RESET ORACLE</small></a><nav className="desktop-navigation" aria-label="Main navigation"><a href="#forecast">Forecast</a><a href="#latest-signals">Latest signals</a><a href="#reset-history">Reset history</a><a href="#method">Method</a><a href="/lab/data">Data Lab</a></nav><span className="mode-pill"><i/> {forecast.mode.toUpperCase()} MODE</span><details className="mobile-navigation"><summary aria-label="Open navigation"><Menu size={18}/><span>Menu</span><ChevronDown size={15}/></summary><nav aria-label="Mobile navigation"><a href="#forecast">Forecast</a><a href="#latest-signals">Latest signals</a><a href="#reset-history">Reset history</a><a href="#method">Method</a><a href="/lab/data">Data Lab</a></nav></details></header>
     {updated && <motion.div className="update-indicator" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} role="status"><Sparkles size={14}/> Forecast updated from new evidence</motion.div>}
 
-    <CinematicHero forecast={forecast} freshness={freshness} trend={trend} latestKnownReset={latestKnownReset} lastCheckedAt={latestChecked}/>
+    <CinematicHero forecast={forecast} hybrid={hybrid} hybridStatus={hybridStatus} freshness={freshness} trend={trend} latestKnownReset={latestKnownReset} lastCheckedAt={latestChecked}/>
 
     <p className="post-hero-disclaimer">Unofficial project. Not affiliated with or endorsed by OpenAI or X.</p>
 
@@ -207,11 +203,21 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
       <div className="quota-plan-copy" data-reveal-primary><p>Sacred Forecast turns verified public signals, milestone velocity, usage pressure and reset history into a probabilistic plan for when to run the work that matters. <small>A six-hour logistic hazard model, evaluated across {forecast.simulation.count.toLocaleString()} seeded simulations.</small></p><a href="#usage-plan" onClick={() => track("plan_next_36_hours")}>PLAN THE NEXT 36 HOURS <span aria-hidden="true">→</span></a></div>
     </section>
 
-    <section id="usage-plan" className="usage-planning" data-band={guidance.band} data-testid="usage-guidance" data-editorial-section><div data-reveal-heading><p className="mono-label gold-label">QUOTA PLANNING</p><h2>SPEND. SAVE. OR QUEUE.</h2><p>Use capacity while the window is stable. Queue heavy agent runs when reset odds rise. Protect the quota that remains when evidence is weak.</p><span className="current-guidance">Current guidance · {guidance.title}: {guidance.guidance}</span></div><aside data-reveal-primary><span>{currentProbability}%</span><b>{guidance.band}</b>{trend === "Rising" ? <TrendingUp/> : trend === "Falling" ? <TrendingDown/> : <Radio/>}</aside><small data-reveal-support>This is usage-planning guidance, not an official OpenAI announcement.</small></section>
+    <section id="usage-plan" className={`usage-planning ${resetReleased ? "reset-available" : ""}`} data-band={guidance.band} data-testid="usage-guidance" data-editorial-section>
+      <div data-reveal-heading>
+        <p className="mono-label gold-label">QUOTA PLANNING</p>
+        <h2>{resetReleased ? "RESET AVAILABLE" : "SPEND. SAVE. OR QUEUE."}</h2>
+        <p>{resetReleased ? "An official reset announcement was detected. Verify that the reset is available on your account, then use the renewed capacity while the window is stable." : "Use capacity while the window is stable. Queue heavy agent runs when reset odds rise. Protect the quota that remains when evidence is weak."}</p>
+        {resetReleased && hybrid?.confirmation && latestResetTimes
+          ? <span className="current-guidance">Released {latestResetTimes.thailand} · {latestResetTimes.utc}. Account availability may still vary.</span>
+          : <span className="current-guidance">Current guidance · {guidance.title}: {guidance.guidance}</span>}
+        {resetReleased && hybrid?.confirmation?.sourceUrl && <a className="source-action reset-guidance-source" href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer" onClick={() => track("view_official_source")}>View official announcement <ExternalLink size={13}/></a>}
+      </div>
+      <aside data-reveal-primary><span>{hybridStatus === "available" && hybrid ? `${hybrid.hybridScore}%` : "—"}</span><b>{resetReleased ? "NEXT RESET CYCLE" : guidance.band}</b>{trend === "Rising" ? <TrendingUp/> : trend === "Falling" ? <TrendingDown/> : <Radio/>}</aside>
+      <small data-reveal-support>{resetReleased ? "The reset announcement is confirmed. The 30% score estimates the next reset cycle." : "This is usage-planning guidance, not an official OpenAI announcement."}</small>
+    </section>
 
-    <section id="signal" className="signal-bar" data-editorial-section><div data-reveal-heading><Mail/><span><b>GET THE RESET SIGNAL</b><small>Only meaningful reset alerts</small></span></div>{emailAlertsConfigured ? submitted ? <div className="signal-success" data-reveal-primary><ShieldCheck/><span><b>Check your inbox to confirm your alerts.</b><small>Your confirmation link is on its way.</small></span></div> : <form onSubmit={subscribe} data-reveal-primary><input name="email" type="email" placeholder="you@example.com" aria-label="Email address" required/><select name="threshold" defaultValue="70" aria-label="Forecast threshold"><option value="60">Forecast reaches 60%</option><option value="70">Forecast reaches 70% — recommended</option><option value="80">Forecast reaches 80%</option><option value="confirmed">Confirmed reset only</option></select><label className="check compact-consent"><input type="checkbox" required/> <span>By subscribing, you agree to receive confirmation and reset-related alerts. Unsubscribe at any time. <Link href="/privacy">Privacy notice</Link>.</span></label><button><Bell size={15}/> Notify me</button></form> : <div className="signal-unavailable" data-reveal-primary><span><b>Email alerts coming soon</b><small>Live delivery is not configured yet.</small></span></div>}<p data-reveal-support>{emailAlertsConfigured ? "Double opt-in · Reset-related alerts only · Unsubscribe anytime" : "The forecast remains available here while alert delivery is offline."}</p></section>
-
-    <section id="forecast" className="section forecast-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label gold-label">THE FORECAST</p><h2>One answer. Three clear views.</h2></div><p>What changed, how certain it is, and what the model sees now.</p></header><div data-reveal-primary><Charts forecast={forecast} history={history} resetHistory={resetHistory} backtestSummary={backtestSummary}/></div></section>
+    <section id="forecast" className="section forecast-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label gold-label">THE FORECAST</p><h2>One answer. Three clear views.</h2></div><p>What changed, how certain it is, and what the model sees now.</p></header><div data-reveal-primary><Charts forecast={forecast} hybrid={hybrid} history={history} resetHistory={resetHistory} backtestSummary={backtestSummary}/></div></section>
 
     <section id="latest-signals" className="section latest-signals-section" data-editorial-section>
       <header className="concise-heading" data-reveal-heading><div><p className="mono-label cyan-label">LATEST SIGNALS FROM TIBO</p><h2>The posts moving the forecast.</h2></div><div className="source-status">{posts.account.profileImageUrl ? <Image className="signal-account-avatar" src={posts.account.profileImageUrl} alt={`${posts.account.displayName} profile`} width={48} height={48}/> : <span className="signal-account-avatar fallback" role="img" aria-label={`${posts.account.displayName} profile placeholder`}>T</span>}<Radio size={14}/><span><b>{posts.mode === "live" ? "LIVE SOURCE" : "DEMO SOURCE"}</b><small>{posts.mode === "live" ? `${posts.account.username} · checked ${relativeTime(posts.lastUpdatedAt, referenceTime)}` : "Synthetic fixtures for offline demonstration"}</small></span></div></header>
@@ -224,8 +230,9 @@ export function OracleExperience({ initialForecast, evidence: initialEvidence, h
         <span><small>Forecast freshness</small><b>{health.forecastFreshness}</b></span>
         {health.latestRun && <><span><small>New posts screened</small><b>{health.latestRun.newPostsScreened}</b></span><span><small>Relevant posts analyzed</small><b>{health.latestRun.relevantPostsAnalyzed}</b></span><span><small>Forecast changed</small><b>{health.latestRun.forecastChanged ? "Yes" : "No"}</b></span>{health.latestRun.forecastRecalculated && !health.latestRun.forecastChanged && <p>Fresh posts and elapsed policy time were evaluated, but the forecast remained below the materiality threshold.</p>}</>}
       </div>
-      <div className={`latest-signals-grid ${showAllPosts ? "show-all" : "compact"}`} data-reveal-support>{posts.posts.map(post => <LatestPostCard key={post.id} post={post} mode={posts.mode} expanded={expandedPosts.has(post.id)} onToggle={() => setExpandedPosts(current => { const next = new Set(current); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} now={referenceTime}/>)}</div>
-      {posts.posts.length > 4 && <button className="view-all-signals" onClick={() => setShowAllPosts(value => !value)}>{showAllPosts ? "Show fewer signals" : "View all latest signals"} <ChevronDown size={16}/></button>}
+      <div className="latest-signal-tabs" role="tablist" aria-label="Latest signal classification"><button type="button" role="tab" aria-selected={signalTab === "forecast_moving"} tabIndex={signalTab === "forecast_moving" ? 0 : -1} className={signalTab === "forecast_moving" ? "active" : ""} onClick={() => setSignalTab("forecast_moving")} onKeyDown={onSignalTabKeyDown}>Forecast-moving <span>{movingPosts.length}</span></button><button type="button" role="tab" aria-selected={signalTab === "screened_out"} tabIndex={signalTab === "screened_out" ? 0 : -1} className={signalTab === "screened_out" ? "active" : ""} onClick={() => setSignalTab("screened_out")} onKeyDown={onSignalTabKeyDown}>Screened out <span>{screenedPosts.length}</span></button></div>
+      {selectedPosts.length ? <div className={`latest-signals-grid ${showAllPosts ? "show-all" : "compact"}`} role="tabpanel" data-reveal-support>{selectedPosts.map(post => <LatestPostCard key={post.id} post={post} mode={posts.mode} expanded={expandedPosts.has(post.id)} onToggle={() => setExpandedPosts(current => { const next = new Set(current); if (next.has(post.id)) next.delete(post.id); else next.add(post.id); return next; })} now={referenceTime}/>)}</div> : <p className="signal-tab-empty" role="tabpanel">No posts in this view.</p>}
+      {selectedPosts.length > 4 && <button className="view-all-signals" onClick={() => setShowAllPosts(value => !value)}>{showAllPosts ? "Show fewer signals" : "View all latest signals"} <ChevronDown size={16}/></button>}
     </section>
 
     <MarketPressure events={externalContextEvents}/>
@@ -282,14 +289,18 @@ function ResetHistory({ resetHistory, milestoneState, historicalDataset, mode }:
 }
 
 function LatestPostCard({ post, mode, expanded, onToggle, now }: { post: LatestPost; mode: "demo" | "live"; expanded: boolean; onToggle: () => void; now: string }) {
-  const classification = post.needsReview ? "Context only" : post.isRelevant ? post.eventType.replaceAll("_", " ") : "Screened as unrelated";
-  const status = post.needsReview ? "Needs review" : post.verified ? "Verified" : post.isRelevant ? "Unverified" : "Screened";
-  return <article className={`signal-card impact-${post.forecastImpact > 0 ? "positive" : post.forecastImpact < 0 ? "negative" : "neutral"}`} data-testid="latest-post-card">
-    <header><span>{mode === "demo" ? "DEMO POST" : "@thsottiaux"}</span><time>{relativeTime(post.postedAt, now)}</time></header>
+  const contribution = post.hybridContributionPoints ?? 0;
+  const resolvedReset = post.cycleStatus === "previous_cycle_resolved" && post.signalType === "reset_confirmation";
+  const historical = post.cycleStatus === "historical";
+  const classification = post.needsReview ? "Context only" : post.signalType ? post.signalType.replaceAll("_", " ") : post.isRelevant ? post.eventType.replaceAll("_", " ") : "Screened as unrelated";
+  const status = resolvedReset ? "Verified" : historical ? "Historical" : post.needsReview ? "Needs review" : post.verified ? "Verified" : post.isRelevant ? "Unverified" : "Screened";
+  const result = resolvedReset ? "Completed confirmation" : contribution > 0 ? "Raised" : contribution < 0 ? "Lowered" : "Contextual";
+  return <article className={`signal-card impact-${contribution > 0 ? "positive" : contribution < 0 ? "negative" : "neutral"}`} data-testid="latest-post-card">
+    <header><span>{resolvedReset ? "RESET RELEASED" : mode === "demo" ? "DEMO POST" : "@thsottiaux"}</span><time dateTime={post.postedAt}>{resolvedReset ? formatUtcTimestamp(post.postedAt) : relativeTime(post.postedAt, now)}</time></header>
     <div className="signal-card-body"><p className={expanded ? "expanded" : ""}>{post.text}</p><button type="button" className="expand-post" aria-expanded={expanded} onClick={onToggle}>{expanded ? "Show less" : "Read full post"} <ChevronDown size={14}/></button></div>
-    <div className="signal-card-result"><div className="signal-impact"><b>{impactLabel(post.forecastImpact)}</b><span>{post.forecastImpact === 0 ? "Forecast unchanged" : "Forecast impact"}</span></div><div className="signal-classification"><b>{classification}</b><span>{post.needsReview ? "Not used until reviewed" : post.isRelevant ? "Relevant signal" : "Local relevance screen"}</span></div></div>
+    <div className="signal-card-result"><div className="signal-impact"><b>{resolvedReset ? "Previous cycle resolved" : contribution === 0 ? "No active impact" : `${contribution > 0 ? "+" : ""}${contribution.toFixed(1)} hybrid pts`}</b><span>{result}</span></div><div className="signal-classification"><b>{resolvedReset ? `${post.resetType === "banked" ? "Banked" : "Full"} reset` : classification}</b><span>{post.signalReason ?? (post.needsReview ? "Not used until reviewed" : post.isRelevant ? "Relevant signal" : "Local relevance screen")}</span></div></div>
     <div className="signal-meta"><span>{post.wasAnalyzed ? `${Math.round(post.extractionConfidence * 100)}% extraction confidence` : "Local screen only"}</span><span className={post.verified ? "verified" : post.needsReview ? "ambiguous" : "screened"}>{status}</span></div>
-    <footer><span>{mode === "demo" ? "Synthetic fixture" : "Official X source"}</span><a className="source-action" href={post.url} target="_blank" rel="noreferrer" onClick={() => track("view_official_source")}>{mode === "demo" ? "Open demo evidence" : "View original post"} <ExternalLink size={13}/></a></footer>
+    <footer><span>{resolvedReset ? "Previous-cycle resolution · 0 active points" : post.exclusionReason ? `${post.exclusionReason.replaceAll("_", " ")} · decay ${Math.round((post.recencyFactor ?? 0) * 100)}%` : mode === "demo" ? "Synthetic fixture" : "Official X source"}</span><a className="source-action" href={post.url} target="_blank" rel="noreferrer" onClick={() => track("view_official_source")}>{resolvedReset ? "View official announcement" : mode === "demo" ? "Open demo evidence" : "View original post"} <ExternalLink size={13}/></a></footer>
   </article>;
 }
 

@@ -3,12 +3,13 @@
 import dynamic from "next/dynamic";
 import { track } from "@vercel/analytics";
 import { useMemo, useState } from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight, ChevronDown, ExternalLink } from "lucide-react";
 import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Forecast } from "@/lib/forecasting";
 import type { HistoryPoint, ResetHistoryItem } from "@/lib/public-data-types";
 import { formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
 import type { PublicBacktestSummary } from "@/lib/backtest-report";
+import type { HybridLikelihood } from "@/lib/hybrid-likelihood";
 
 const AdvancedDiagnostics = dynamic(() => import("./advanced-diagnostics"), {
   ssr: false,
@@ -71,7 +72,7 @@ const contributionExplanations: Record<string, string> = {
 const viewOrder: ForecastView[] = ["movement", "signals", "range"];
 const probabilityBand = (probability: number) => probability >= .98 ? "CONFIRMED" : probability >= .8 ? "IMMINENT" : probability >= .6 ? "HIGH" : probability >= .4 ? "ELEVATED" : probability >= .2 ? "WATCH" : "LOW";
 
-export default function Charts({ forecast, history, resetHistory, backtestSummary }: { forecast: Forecast; history: HistoryPoint[]; resetHistory: ResetHistoryItem[]; backtestSummary: PublicBacktestSummary | null }) {
+export default function Charts({ forecast, hybrid, history, resetHistory, backtestSummary }: { forecast: Forecast; hybrid: HybridLikelihood | null; history: HistoryPoint[]; resetHistory: ResetHistoryItem[]; backtestSummary: PublicBacktestSummary | null }) {
   const [view, setView] = useState<ForecastView>("movement");
   const [range, setRange] = useState<Range>("ALL");
   const [trendView, setTrendView] = useState<TrendView>("live");
@@ -116,11 +117,16 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
   );
   const historyData = filtered.map((point, index) => ({
     ...point,
-    bandBase: point.low,
-    bandRange: Math.max(0, point.high - point.low),
+    previousProbability: point.cyclePhase !== "active" ? point.probability : null,
+    activeProbability: point.cyclePhase === "active" ? point.probability : null,
+    previousBandBase: point.cyclePhase !== "active" ? point.low : null,
+    previousBandRange: point.cyclePhase !== "active" ? Math.max(0, point.high - point.low) : null,
+    activeBandBase: point.cyclePhase === "active" ? point.low : null,
+    activeBandRange: point.cyclePhase === "active" ? Math.max(0, point.high - point.low) : null,
     relevantMarker: point.evidencePostId && (point.impact ?? 0) >= 0 ? point.probability : null,
     negativeMarker: (point.impact ?? 0) < 0 ? point.probability : null,
     verifiedMarker: point.verified ? point.probability : null,
+    resolvedMarker: point.resolvedResetAt ? point.probability : null,
     currentMarker: index === filtered.length - 1 ? point.probability : null,
     before: history[Math.max(0, history.findIndex((item) => item.forecastId === point.forecastId) - 1)]?.probability ?? point.probability,
   }));
@@ -146,7 +152,9 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
   const trackingDate = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
   }).format(new Date(first?.time ?? forecast.generatedAt));
-  const summary = history.length >= 2 && first && last ? `Reset probability ${delta >= 0 ? "increased" : "decreased"} from ${first.probability}% to ${last.probability}%${last.label ? ` after ${last.label.toLowerCase()} evidence` : ""}.` : `Live forecast tracking began on ${trackingDate}. More points will appear as new signals are processed.`;
+  const summary = hybrid?.eventResolutionStatus === "resolved"
+    ? `The previous forecast resolved when the official reset was released. Current values estimate a new reset after that event.`
+    : history.length >= 2 && first && last ? `Reset probability ${delta >= 0 ? "increased" : "decreased"} from ${first.probability}% to ${last.probability}%${last.label ? ` after ${last.label.toLowerCase()} evidence` : ""}.` : `Live forecast tracking began on ${trackingDate}. More points will appear as new signals are processed.`;
 
   const selectView = (next: ForecastView) => setView(next);
   const onTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -179,8 +187,9 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
           <section id="forecast-panel-movement" role="tabpanel" aria-labelledby="forecast-tab-movement" className="forecast-view-panel movement-view" data-testid="probability-trend">
             <header className="forecast-view-heading">
               <div>
-                <span>{trendView === "live" ? "RESET PROBABILITY TREND" : "VERIFIED RESET CALENDAR"}</span>
+                <span>{trendView === "live" ? `CALIBRATED ${forecast.horizonHours}-HOUR PROBABILITY TREND` : "VERIFIED RESET CALENDAR"}</span>
                 <h3>{trendView === "live" ? "How the forecast is moving" : "Milestone announcements over time"}</h3>
+                {trendView === "live" && <p>This chart tracks Reset Oracle v2 probability, not the Live Reset Likelihood score.</p>}
               </div>
               <div className="trend-view-toggle" aria-label="Movement data source">
                 <button type="button" className={trendView === "live" ? "active" : ""} onClick={() => setTrendView("live")} aria-pressed={trendView === "live"}>
@@ -193,6 +202,10 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
             </header>
             {trendView === "live" ? (
               <>
+                {hybrid?.eventResolutionStatus === "resolved" && hybrid.confirmation && <div className="forecast-cycle-resolution" role="status">
+                  <div><span>RESET RELEASED</span><strong>{formatUtcTimestamp(hybrid.confirmation.occurredAt)}</strong><p>The previous forecast resolved at {hybrid.previousCycleFinalProbability == null ? "the confirmed event" : `${Math.round(hybrid.previousCycleFinalProbability * 100)}%`}. The active forecast starts a new visual cycle.</p></div>
+                  {hybrid.confirmation.sourceUrl && <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">Official source <ExternalLink size={14}/></a>}
+                </div>}
                 {history.length < 2 ? (
                   <div className="sparse-forecast-state" data-testid="sparse-forecast-state">
                     <span>LIVE TRACKING HAS JUST STARTED</span>
@@ -225,10 +238,13 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
                           <XAxis dataKey="time" tickFormatter={dateLabel} stroke="#717771" tickLine={false} axisLine={false} />
                           <YAxis domain={[0, 100]} unit="%" stroke="#717771" tickLine={false} axisLine={false} width={42} />
                           <Tooltip contentStyle={chartTooltip} labelFormatter={(value) => formatUtcTimestamp(String(value))} formatter={(value, name, item) => (name === "probability" ? [`${value}% · ${String(item.payload.label)}`, `Forecast (${item.payload.before}% → ${value}%)`] : [value, name])} />
-                          <Area dataKey="bandBase" stackId="interval" stroke="none" fill="transparent" isAnimationActive={false} />
-                          <Area dataKey="bandRange" stackId="interval" stroke="none" fill="url(#goldBand)" animationDuration={800} />
+                          <Area dataKey="previousBandBase" stackId="previous-interval" stroke="none" fill="transparent" isAnimationActive={false} />
+                          <Area dataKey="previousBandRange" stackId="previous-interval" stroke="none" fill="url(#goldBand)" animationDuration={800} />
+                          <Area dataKey="activeBandBase" stackId="active-interval" stroke="none" fill="transparent" isAnimationActive={false} />
+                          <Area dataKey="activeBandRange" stackId="active-interval" stroke="none" fill="url(#goldBand)" animationDuration={800} />
                           <Line
-                            dataKey="probability"
+                            dataKey="previousProbability"
+                            name="probability"
                             stroke="#ffd36a"
                             strokeWidth={3}
                             dot={false}
@@ -240,6 +256,7 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
                             }}
                             animationDuration={850}
                           />
+                          <Line dataKey="activeProbability" name="probability" stroke="#ffd36a" strokeWidth={3} dot={{ fill: "#ffd36a", r: 5, stroke: "#fff3c9", strokeWidth: 1 }} activeDot={{ fill: "#ffd36a", r: 6, stroke: "#fff3c9", strokeWidth: 1 }} animationDuration={850}/>
                           <Line
                             dataKey="relevantMarker"
                             stroke="none"
@@ -270,6 +287,7 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
                               strokeWidth: 2,
                             }}
                           />
+                          <Line dataKey="resolvedMarker" stroke="none" dot={{ fill: "#ffd36a", r: 9, stroke: "#f3eee2", strokeWidth: 2 }}/>
                           <Line
                             dataKey="currentMarker"
                             stroke="none"
@@ -296,6 +314,7 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
                         <i className="orange" />
                         Negative signal
                       </span>
+                      <span><i className="resolved"/> Reset released</span>
                     </div>
                     <p className="chart-summary" aria-live="polite">
                       {summary}
@@ -480,6 +499,7 @@ export default function Charts({ forecast, history, resetHistory, backtestSummar
         </summary>
         {diagnosticsOpen && (
           <div className="diagnostics-disclosure">
+            {hybrid && <section className="hybrid-model-record" aria-labelledby="hybrid-model-title"><header><span>ACTIVE NEXT-RESET FORECAST</span><h3 id="hybrid-model-title">New-cycle operational state</h3><p>The confirmed reset closes the previous forecast. Current scores estimate a future reset after that event.</p></header>{hybrid.eventResolutionStatus === "resolved" && hybrid.confirmation && <div className="resolved-event-audit"><span>RESOLVED EVENT</span><strong>{hybrid.confirmation.resetType === "banked" ? "Banked reset released" : "Full reset released"}</strong><p>{formatUtcTimestamp(hybrid.confirmation.occurredAt)} · previous forecast {hybrid.previousCycleFinalProbability == null ? "record unavailable" : `${Math.round(hybrid.previousCycleFinalProbability * 100)}%`}</p>{hybrid.confirmation.sourceUrl && <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">Official source <ExternalLink size={13}/></a>}</div>}<dl><div><dt>Active state</dt><dd>{hybrid.hybridState.replaceAll("_", " ")}</dd></div><div><dt>Live Reset Likelihood</dt><dd>{hybrid.hybridScore}</dd></div><div><dt>Active cycle start</dt><dd>{hybrid.cycleStartAt ? formatUtcTimestamp(hybrid.cycleStartAt) : "Unavailable"}</dd></div><div><dt>Current calibrated probability</dt><dd>{Math.round(hybrid.calibratedProbability * 100)}%</dd></div><div><dt>Cycle pressure</dt><dd>{hybrid.cyclePoints.toFixed(1)}</dd></div><div><dt>Historical component</dt><dd>{hybrid.historicalPoints.toFixed(1)}</dd></div><div><dt>Signal component</dt><dd>{hybrid.signalPoints.toFixed(1)}</dd></div><div><dt>Negative component</dt><dd>{hybrid.negativePoints.toFixed(1)}</dd></div><div><dt>Override</dt><dd>{hybrid.appliedOverride ?? "None"}</dd></div></dl></section>}
             <section className="model-summary" aria-labelledby="model-summary-title">
               <header>
                 <span>MODEL RECORD</span>

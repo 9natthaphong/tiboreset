@@ -1,10 +1,12 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, Mail } from "lucide-react";
+import { ArrowDown, ExternalLink } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { Forecast } from "@/lib/forecasting";
+import type { HybridLikelihood } from "@/lib/hybrid-likelihood";
+import { formatResetEventTimes, formatUtcTimestamp } from "@/lib/format-date";
 
 type Props = {
   forecast: Forecast;
@@ -12,6 +14,8 @@ type Props = {
   trend: "Rising" | "Falling" | "Steady";
   latestKnownReset: string;
   lastCheckedAt: string;
+  hybrid: HybridLikelihood | null;
+  hybridStatus: "available" | "unavailable";
 };
 
 type FrameVideo = HTMLVideoElement & {
@@ -21,21 +25,18 @@ type FrameVideo = HTMLVideoElement & {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const percentage = (value: number) => Math.round(value * 100);
-const formatTimestamp = (value: string) => new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "UTC",
-}).format(new Date(value));
 const VIDEO_START_PROGRESS = 0.15;
 const VIDEO_END_PROGRESS = 0.78;
 const TOPBAR_REVEAL_PROGRESS = 0.29;
 
-export function CinematicHero({ forecast, freshness, trend, latestKnownReset, lastCheckedAt }: Props) {
+export function CinematicHero({ forecast, freshness, trend, latestKnownReset, lastCheckedAt, hybrid, hybridStatus }: Props) {
   const root = useRef<HTMLElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
   const [loaderVisible, setLoaderVisible] = useState(true);
   const [loadProgress, setLoadProgress] = useState(12);
+  const resetReleased = hybrid?.eventResolutionStatus === "resolved" && Boolean(hybrid.confirmation);
+  const resetTimes = hybrid?.confirmation ? formatResetEventTimes(hybrid.confirmation.occurredAt) : null;
 
   useLayoutEffect(() => {
     const section = root.current;
@@ -78,6 +79,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
     const buildMasterTimeline = () => {
       const title = section.querySelector(".hero-story-title");
       const probability = section.querySelector(".hero-story-probability");
+      const resolution = section.querySelector(".hero-event-status");
       const support = section.querySelector(".hero-final-meta");
       const payoff = section.querySelector(".hero-story-payoff");
       const atmosphere = section.querySelector(".hero-bloom");
@@ -88,7 +90,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
       gsap.set(media, { scale: 1.015, filter: "brightness(.38) saturate(.68)" });
       gsap.set(title, { autoAlpha: 1, y: 0, scale: 1 });
       gsap.set(probability, { autoAlpha: 0, y: 28, scale: 0.985, filter: "blur(8px)" });
-      gsap.set([support, payoff], { autoAlpha: 0, y: 24 });
+      gsap.set([resolution, support, payoff], { autoAlpha: 0, y: 24 });
       gsap.set(atmosphere, { autoAlpha: 0.08, scale: 0.86 });
       gsap.set(foreground, { autoAlpha: 0.72, yPercent: 0 });
       gsap.set(handoff, { scaleX: 0, transformOrigin: "left center" });
@@ -107,6 +109,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
         .to(probability, { autoAlpha: 1, y: 0, scale: 1.04, filter: "blur(0px)", duration: 0.17 }, 0.38)
         .to(media, { scale: 1.052, filter: "brightness(.78) saturate(.96)", duration: 0.33 }, 0.45)
         .to(atmosphere, { autoAlpha: 0.72, scale: 1.08, duration: 0.30 }, 0.46)
+        .to(resolution, { autoAlpha: 1, y: 0, duration: 0.18 }, 0.50)
         .to(support, { autoAlpha: 1, y: 0, duration: 0.20 }, 0.54)
         .to(support ? Array.from(support.children) : [], { autoAlpha: 1, y: 0, stagger: 0.025, duration: 0.12 }, 0.55)
         .to(title, { autoAlpha: 0.9, y: -30, duration: 0.16 }, 0.67)
@@ -328,18 +331,30 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
           <h1 aria-label="WILL TIBO RESET?"><span>WILL TIBO</span><em>RESET?</em></h1>
           <p className="hero-premise">Forecast the reset. Plan the next 36 hours of coding.</p>
         </div>
+        {resetReleased && hybrid?.confirmation && resetTimes && <aside className="hero-event-status" data-testid="reset-release-status">
+          <span>RESET RELEASED</span>
+          <h2>Latest official reset</h2>
+          <dl><div><dt>Thailand</dt><dd>{resetTimes.thailand}</dd></div><div><dt>UTC</dt><dd>{resetTimes.utc}</dd></div><div><dt>Reset type</dt><dd>{hybrid.confirmation.resetType === "banked" ? "Banked usage reset" : "Full usage reset"}</dd></div></dl>
+          <p>An official completed reset announcement was detected. The forecast below now estimates the next reset cycle.</p>
+          {hybrid.confirmation.sourceUrl && <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">Official source <ExternalLink size={13}/></a>}
+        </aside>}
         <div className="hero-story-probability">
-          <strong data-testid="hero-probability">{percentage(forecast.probability)}<small>%</small></strong>
+          <span>{resetReleased ? "NEW RESET CYCLE" : "LIVE RESET LIKELIHOOD"}</span>
+          <strong data-testid="hero-probability">{hybridStatus === "available" && hybrid ? hybrid.hybridScore : "—"}{hybridStatus === "available" && <small>%</small>}</strong>
+          <p><b>Live Reset Likelihood</b><small>{resetReleased ? "New-cycle operational score · not a calibrated probability" : "Hybrid operational score · not a calibrated probability"}</small></p>
+          <div className="hero-calibrated-probability"><span>CALIBRATED {forecast.horizonHours}-HOUR PROBABILITY</span><b>{percentage(forecast.probability)}%</b><small>{percentage(forecast.credibleIntervalLow)}–{percentage(forecast.credibleIntervalHigh)}%</small></div>
         </div>
         <dl className="hero-final-meta" aria-label="Current forecast details">
           <div><dt>Trend</dt><dd className={`trend-${trend.toLowerCase()}`}>{trend}</dd></div>
           <div><dt>Latest verified milestone</dt><dd>{latestKnownReset}</dd></div>
           <div><dt>Confidence range</dt><dd>{percentage(forecast.credibleIntervalLow)}–{percentage(forecast.credibleIntervalHigh)}%</dd></div>
           <div><dt>Horizon</dt><dd>{forecast.horizonHours} hours</dd></div>
-          <div><dt>Last checked</dt><dd>{formatTimestamp(lastCheckedAt)} UTC</dd></div>
+          <div><dt>Last checked</dt><dd>{formatUtcTimestamp(lastCheckedAt)}</dd></div>
         </dl>
         <div className="hero-story-payoff">
-          <a href="#signal"><Mail size={16}/> Get the reset signal</a>
+          {resetReleased && hybrid?.confirmation?.sourceUrl
+            ? <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">VIEW OFFICIAL RESET <ExternalLink size={15}/></a>
+            : <a href="#latest-signals">VIEW LATEST SIGNALS <ArrowDown size={15}/></a>}
           <span>{forecast.mode === "demo" ? "Demo mode" : `${freshness} · Live mode`}</span>
         </div>
       </div>

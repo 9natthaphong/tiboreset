@@ -1,5 +1,6 @@
 import type { EventType, Evidence, Forecast } from "@/lib/forecasting";
 import type { ExternalContextEvent } from "@/lib/external-context";
+import type { HybridLikelihood, StructuredSignalType } from "@/lib/hybrid-likelihood";
 
 export type PublicMode = "demo" | "live";
 
@@ -17,6 +18,16 @@ export type LatestPost = {
   needsReview: boolean;
   wasAnalyzed: boolean;
   metrics: { likes: number; reposts: number; replies: number };
+  signalType?: StructuredSignalType;
+  hybridContributionPoints?: number;
+  probabilityCounterfactualDeltaPercentagePoints?: number | null;
+  signalBucket?: "forecast_moving" | "screened_out";
+  signalReason?: string;
+  recencyFactor?: number;
+  exclusionReason?: string | null;
+  resetType?: "full" | "banked" | null;
+  resolvedAt?: string | null;
+  cycleStatus?: "active_cycle" | "previous_cycle_resolved" | "historical";
 };
 
 export type LatestPostsResponse = {
@@ -38,6 +49,10 @@ export type HistoryPoint = {
   evidencePostId?: string;
   verified?: boolean;
   impact?: number;
+  cyclePhase?: "previous" | "active";
+  resolvedResetAt?: string;
+  resolvedResetSource?: string;
+  resolvedResetType?: "full" | "banked";
 };
 
 export type ResetHistoryItem = {
@@ -110,4 +125,7 @@ export type PublicSnapshot = {
   historicalDataset: HistoricalDatasetSummary;
   externalContextEvents: ExternalContextEvent[];
   health: PublicHealth;
+  hybrid: HybridLikelihood | null;
+  hybridStatus: "available" | "unavailable";
+  canonicalCutoff: string | null;
 };

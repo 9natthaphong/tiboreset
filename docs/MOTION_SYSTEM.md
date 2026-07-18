@@ -7,7 +7,7 @@ The hero is a four-act scroll score driven by `assets/TIBORESET.mp4` through its
 | 0–.18 | Shadow | Low exposure, slow opening playback, heavy foreground | Restrained title; probability only hinted |
 | .18–.44 | Discovery | Video advances, saturation and light rise | Probability and supporting statistics resolve |
 | .44–.70 | Revelation | RESET frame and bloom become dominant | Probability reaches full hierarchy; data becomes readable |
-| .70–1 | Payoff | Final bright frame holds | Evidence/model line and email/demo actions appear |
+| .70–1 | Payoff | Final bright frame holds | Resolved-event status and the official-source or latest-signals action appear |
 
 GSAP owns hero opacity, transforms, filters, and chapter timing. The video smoothing loop exclusively owns `currentTime`. Ambient fog, rays, and particles are CSS-only and never write GSAP-owned properties. Motion components outside the hero remain independent and do not target hero elements.
 

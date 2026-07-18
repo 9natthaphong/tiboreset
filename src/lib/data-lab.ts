@@ -2,10 +2,13 @@ import "server-only";
 import { z } from "zod";
 import { loadHistoricalDatasets } from "@/lib/historical-data";
 import { loadExternalContextEvents, ReviewedOpenAIStatusAdapter } from "@/lib/external-context";
-import { MODEL_CONFIG } from "@/lib/forecasting/model-config";
 import { getServiceSupabase, isServiceSupabaseConfigured } from "@/lib/supabase/server";
 import { buildMilestoneSeedRows } from "@/lib/historical-data";
 import { deriveMilestoneState } from "@/lib/milestones";
+import { loadCanonicalHybridSnapshot } from "@/lib/canonical-hybrid-snapshot";
+import { MODEL_V2_VERSION } from "@/lib/forecasting/v2";
+import { structuredSignalFromStored } from "@/lib/extraction/structured-signal";
+import type { EventType } from "@/lib/forecasting";
 
 const backtestSchema = z.object({ cutoff_at: z.string(), horizon_hours: z.number(), predicted_probability: z.coerce.number(), actual_outcome: z.boolean(), brier_loss: z.coerce.number(), model_version: z.string(), evidence_count: z.number() });
 const runSchema = z.object({ id: z.string(), completed_at: z.string().nullable(), status: z.string(), posts_read: z.number().nullable(), posts_inserted: z.number().nullable(), posts_analyzed: z.number().nullable(), metadata: z.record(z.string(), z.unknown()).nullable() });
@@ -35,10 +38,11 @@ export async function getDataLabSnapshot() {
   const seedMilestones = buildMilestoneSeedRows(datasets);
   const seedMilestoneState = deriveMilestoneState(seedMilestones);
   const context = { externalContext: externalContext.events, operationalEvents, milestoneCandidates: seedMilestones, milestoneState: seedMilestoneState };
-  if (!isServiceSupabaseConfigured()) return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
+  if (!isServiceSupabaseConfigured()) return { database: "unavailable" as const, seed, modelVersion: MODEL_V2_VERSION, latestForecast: null, canonicalSnapshot: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
   try {
     const client = getServiceSupabase();
-    const [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails, milestones] = await Promise.all([
+    const [canonicalSnapshot, posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails, milestones] = await Promise.all([
+      loadCanonicalHybridSnapshot(client),
       client.from("source_posts").select("id", { count: "exact", head: true }),
       client.from("extracted_events").select("id", { count: "exact", head: true }),
       client.from("known_reset_events").select("id", { count: "exact", head: true }),
@@ -53,13 +57,18 @@ export async function getDataLabSnapshot() {
     for (const result of [posts, events, resets, forecasts, latestForecast, backtests, runs, eventDetails, postDetails, milestones]) if (result.error) throw result.error;
     const parsedPosts = z.array(postDetailSchema).parse(postDetails.data ?? []);
     const postById = new Map(parsedPosts.map(post => [post.id, post]));
-    const extractedEvents = z.array(eventDetailSchema).parse(eventDetails.data ?? []).map(event => ({ ...event, source: postById.get(event.source_post_id) ?? null }));
+    const extractedEvents = z.array(eventDetailSchema).parse(eventDetails.data ?? []).map(event => {
+      const source = postById.get(event.source_post_id) ?? null;
+      const signalType = source ? structuredSignalFromStored({ text: source.text, eventType: event.event_type as EventType, payload: event.event_payload, confidence: event.extraction_confidence, requiresReview: event.requires_review }).signalType : typeof event.event_payload.signal_type === "string" ? event.event_payload.signal_type : event.event_type;
+      return { ...event, signal_type: signalType, source };
+    });
     const milestoneCandidates = (milestones.data ?? []).map(row => ({ id: String(row.id), sourcePostId: String(row.source_post_id), sourceUrl: String(row.source_url), sourceAccount: String(row.source_account), reportedActiveUsers: Number(row.reported_active_users), denominator: row.denominator, resetType: row.reset_type, announcedAt: String(row.announced_at), executionAt: row.execution_at ? String(row.execution_at) : null, verificationStatus: row.verification_status, verificationMethod: String(row.verification_method), rejectionReason: row.rejection_reason ? String(row.rejection_reason) : null })) as typeof seedMilestones;
     return {
       database: "connected" as const,
       seed,
-      modelVersion: MODEL_CONFIG.version,
+      modelVersion: canonicalSnapshot.forecast.modelVersion,
       latestForecast: latestForecast.data,
+      canonicalSnapshot,
       counts: { sourcePosts: posts.count ?? 0, extractedEvents: events.count ?? 0, knownResetEvents: resets.count ?? 0, forecasts: forecasts.count ?? 0 },
       backtests: z.array(backtestSchema).parse(backtests.data ?? []),
       ingestionRuns: z.array(runSchema).parse(runs.data ?? []),
@@ -69,6 +78,6 @@ export async function getDataLabSnapshot() {
       milestoneState: deriveMilestoneState(milestoneCandidates),
     };
   } catch {
-    return { database: "unavailable" as const, seed, modelVersion: MODEL_CONFIG.version, latestForecast: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
+    return { database: "unavailable" as const, seed, modelVersion: MODEL_V2_VERSION, latestForecast: null, canonicalSnapshot: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
   }
 }

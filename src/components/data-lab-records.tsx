@@ -6,6 +6,7 @@ import { ChevronDown, Clipboard, ExternalLink } from "lucide-react";
 type EventRecord = {
   id: string;
   event_type: string;
+  signal_type?: string;
   extraction_confidence: number;
   requires_review: boolean;
   created_at: string;
@@ -112,7 +113,7 @@ export function ExtractedEventRecords({
     () =>
       [...events].sort((a, b) => {
         if (sort === "type") {
-          return a.event_type.localeCompare(b.event_type);
+          return (a.signal_type ?? a.event_type).localeCompare(b.signal_type ?? b.event_type);
         }
 
         if (sort === "confidence") {
@@ -211,7 +212,7 @@ export function ExtractedEventRecords({
             </header>
 
             <h3>
-              {event.event_type.replaceAll("_", " ")}
+              {(event.signal_type ?? event.event_type).replaceAll("_", " ")}
             </h3>
 
             <p>
@@ -267,8 +268,9 @@ function FragmentRow({
 
         <td>
           <b>
-            {event.event_type.replaceAll("_", " ")}
+            {(event.signal_type ?? event.event_type).replaceAll("_", " ")}
           </b>
+          {event.signal_type && event.signal_type !== event.event_type && <small>Stored event: {event.event_type.replaceAll("_", " ")}</small>}
           <code>{event.extraction_version}</code>
         </td>
 
