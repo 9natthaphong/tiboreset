@@ -5,121 +5,128 @@
 | Field | Submission copy |
 | --- | --- |
 | Project | Sacred Forecast / TiboReset |
-| Internal engine | Reset Oracle v2 |
+| Engines | Sacred Likelihood + Reset Oracle v2 |
 | Tagline | Forecast the reset. Plan the next 36 hours of coding. |
 | Repository | <https://github.com/9natthaphong/tiboreset> |
 | Live app | <https://tiboreset.vercel.app> |
 | Public Data Lab | <https://tiboreset.vercel.app/lab/data> |
 
-Sacred Forecast is an unofficial, explainable 36-hour forecast for a possible Codex quota-reset announcement. It converts monitored public signals and verified milestone history into an auditable probability range and a practical quota plan.
+Sacred Forecast is an unofficial two-layer reset-risk product. Live Reset Likelihood is a cycle-aware operational score; Reset Oracle v2 remains the calibrated probability of an official reset announcement inside the next rolling 36 hours.
 
 ## Inspiration
 
-Codex users have limited capacity, and the timing of a reset can change whether a developer should spend remaining quota on an expensive agent run, save it for critical work, or queue the task. The clues are public but fragmented across posts, milestone announcements, operational context, and reset history. A token counter cannot answer the planning question, while rumor alone is not trustworthy enough.
+Codex users have limited capacity, and reset timing can change whether a developer should spend remaining quota on an expensive agent run, save it for critical work, or queue the task. Public clues are fragmented across posts, milestones, operational context, and reset history. Sacred Forecast makes those signals inspectable instead of presenting rumor as certainty.
 
 ## What it does
 
 - Monitors new public posts from the configured official X account without scraping or historical account crawling.
 - Screens obvious irrelevant posts locally before any model call.
 - Uses GPT-5.6 through the OpenAI Responses API to extract strict, reviewable evidence from candidate posts.
-- Blocks jokes, questions, metaphors, uncertain statements, and other ambiguous evidence from changing the public forecast automatically.
-- Separates policy-driven milestone risk from discretionary signal-driven risk.
-- Runs 5,000 deterministic seeded simulations to produce a 36-hour estimate and uncertainty interval.
-- Exposes evidence, feature origins, coefficients, model version, data cutoff, seed, and audit records.
-- Turns probability bands into deterministic spend, save, or queue guidance.
-- Provides a public, read-only Data Lab and a no-credential offline Demo Mode.
+- Blocks jokes, questions, metaphors, uncertain statements, and review-gated evidence from changing either metric automatically.
+- Calculates a primary 30–98 Live Reset Likelihood from cycle timing, verified history, Reset Oracle v2, and structured current signals. This operational score is not calibrated.
+- Preserves Reset Oracle v2 as a separate calibrated 36-hour probability with a credible interval and 5,000 deterministic seeded simulations.
+- Resolves the previous cycle when a completed reset is verified, preserves the event for audit, and starts the next cycle immediately from a 30 baseline.
+- Exposes Forecast-moving and Screened out evidence, model provenance, resolved-event history, and active-cycle state through a public read-only Data Lab.
 
 ## How we built it
 
-The product uses Next.js App Router and strict TypeScript. Supabase Postgres stores monitored accounts, source posts, structured extraction records, verified milestones, forecasts, contributions, ingestion runs, backtests, subscriptions, and delivery state. The official X API adapter reads at most 10 posts during initial activation and uses `since_id` for unseen posts afterward.
+The product uses Next.js App Router and strict TypeScript. Supabase Postgres stores monitored accounts, source posts, structured extraction records, verified milestones and resets, forecasts, contributions, ingestion runs, and backtests. The official X API adapter reads at most 10 posts during initial activation and uses `since_id` for unseen posts afterward.
 
-Relevant candidate posts are sent to the OpenAI Responses API with a strict Zod-backed schema. GPT-5.6 returns evidence fields, not a probability. Reset Oracle v2 then calculates two independent branches:
+Candidate posts go to the OpenAI Responses API with a strict Zod-backed schema. GPT-5.6 returns evidence fields, never a final score. Deterministic TypeScript then calculates two distinct outputs:
 
-1. A policy branch estimates whether the next pledged milestone will arrive inside 36 hours and the posterior probability of a reset announcement if it does.
-2. A discretionary branch applies six-hour logistic hazards to live signal evidence using versioned expert-prior coefficients.
+1. **Reset Oracle v2 calibrated probability:** a policy branch estimates pledged-milestone arrival and reset-given-milestone risk; a discretionary branch applies six-hour logistic hazards to current evidence. Five thousand seeded simulations produce the rolling 36-hour probability interval.
+2. **Live Reset Likelihood:** a separately versioned hybrid engine combines cycle pressure, verified history, the Reset Oracle result, and decayed structured signals into a bounded operational score.
 
-The two risks are combined as independent causes and sampled through 5,000 seeded simulations. Every successful ingestion run recalculates the time-dependent v2 forecast, while materiality and freshness rules prevent noisy duplicate snapshots.
+A canonical snapshot keeps the homepage, charts, public API, Latest Signals, and Data Lab synchronized. A completed reset closes one cycle, records the resolved outcome, excludes pre-reset evidence, and begins the active next-reset forecast.
 
 ## The role of OpenAI
 
-GPT-5.6 is an evidence extractor. It interprets candidate public-post text and returns strict fields such as event type, milestone, denominator, reset type, confidence, short evidence excerpts, uncertainty, and review status. It never produces the final forecast probability.
-
-Reset Oracle v2 calculates the probability deterministically in TypeScript. Obvious irrelevant posts are screened before an API call, and a separate deterministic safety layer prevents ambiguous language from moving the forecast.
+GPT-5.6 interprets candidate public-post text and returns strict fields such as signal type, reset type, confidence, evidence excerpts, uncertainties, and review status. It does not calculate Live Reset Likelihood or Reset Oracle v2's calibrated probability. Obvious irrelevant posts are screened before a model call, and deterministic safety rules keep ambiguous evidence from moving the forecast automatically.
 
 ## How Codex helped
 
-Codex was used across the engineering lifecycle: repository implementation, database and API work, test creation, production debugging, responsive hardening, the ambiguity-safety backfill, construction of the strict one-month walk-forward evaluation, Reset Oracle v2 implementation, documentation, and deployment preparation. Private prompts, session content, credentials, and provider payloads are not part of the submission.
+Codex was used across the engineering lifecycle: repository implementation, database and API work, test creation, production debugging, responsive hardening, ambiguity-safety work, the strict one-month walk-forward evaluation, Reset Oracle v2, the hybrid cycle engine, documentation, and deployment preparation. Private prompts, session content, credentials, and provider payloads are not part of the submission.
 
 ## Challenges
 
-- **Separating extraction from prediction.** The language model had to structure evidence without being allowed to invent a percentage.
-- **Handling playful public language safely.** A reset-button joke initially exposed why extraction confidence alone was insufficient. The deterministic ambiguity gate now assigns such evidence zero automatic impact and requires review.
-- **Modeling consecutive milestone resets.** A generic cooldown suppressed risk after each reset even when the public policy allowed another reset at the next million-user milestone. V2 isolates policy risk so discretionary cooldown cannot suppress it.
-- **Preventing leakage.** Every backtest cutoff reconstructs evidence, milestones, interval estimates, and posterior counts using only information available at that time.
-- **Keeping a time-dependent forecast fresh.** V2 milestone-arrival pressure changes with elapsed time, so the ingestion loop recalculates even when no new relevant post is found and saves only material or hourly-fresh snapshots.
+- **Separating extraction from prediction.** GPT-5.6 had to structure evidence without being allowed to invent either final metric.
+- **Handling playful language safely.** Jokes, questions, metaphors, and uncertain claims receive zero automatic impact.
+- **Modeling consecutive milestone resets.** Reset Oracle v2 isolates policy risk so discretionary cooldown cannot suppress rapid pledged milestones.
+- **Closing resolved cycles correctly.** A completed reset remains auditable but contributes zero to the next cycle.
+- **Preventing leakage.** Every backtest cutoff reconstructs evidence and model context using only information available at that time.
 
 ## Accomplishments
 
 - A complete offline Demo Mode with deterministic local extraction and clearly labeled synthetic data.
 - Incremental official-X ingestion with cursoring, deduplication, audit payloads, rate-limit handling, and local pre-screening.
 - Strict OpenAI structured evidence extraction with deterministic fallback and ambiguity protection.
-- A policy-aware, reproducible forecast with separate risk branches and public feature provenance.
-- Human-reviewed 3M-9M announcement history that retains full, banked, and scheduled distinctions without inventing execution times.
-- A public Data Lab, audit export, protected operational surface, double-opt-in alert lifecycle, and privacy-safe public visit counter.
-- A cached, six-hour walk-forward backtest with announcement-post exclusion in the strict pre-announcement evaluation.
+- Two inspectable outputs that answer different questions without conflating an operational score with a calibrated probability.
+- Human-reviewed 3M–9M announcement history preserving full, banked, and scheduled distinctions without inventing execution times.
+- A public Data Lab, canonical audit snapshot, protected operational surface, and privacy-safe public visit counter.
+- A cached, six-hour walk-forward backtest with target-announcement exclusion in strict pre-announcement evaluation.
 
 ## Backtest result
 
-Evaluation period: **17 June to 17 July 2026**.
+The historical comparison applies to Reset Oracle v2, not Live Reset Likelihood.
 
 | Measure | Strict pre-announcement result |
 | --- | ---: |
+| Evaluation period | 17 June to 17 July 2026 |
 | Forecasts generated | 120 |
 | Scored windows | 115 |
 | Verified announcements | 4 |
 | Reset Oracle v1 Brier score | 0.1522 |
 | Reset Oracle v2 Brier score | 0.1127 |
-| Constant base-rate Brier score | 0.1320 |
-| V2 Brier skill vs. constant | +0.1463 |
+| Constant baseline Brier score | 0.1320 |
+| v2 skill versus constant | +14.63% |
 | Events crossing 30% before publication | 2 of 4 |
 | Events crossing 50% before publication | 1 of 4 |
 | Highest observed false-alarm probability | 5.1% |
 
-The observed 30% lead time was 19.6 hours before the 8M announcement. Before the 9M announcement, v2 crossed 30% 52.2 hours early and 50% 28.2 hours early. It did not cross 30% before the 6M or 7M announcements.
+Observed lead time was 19.6 hours above 30% before the 8M announcement. Before the 9M announcement, v2 crossed 30% 52.2 hours early and 50% 28.2 hours early. It did not cross 30% before the 6M or 7M announcements.
 
-**Interpretation: Promising but unvalidated.** V2 improved on v1 and the constant baseline in this cached month, but four announcements cannot establish general reliability. Historical simulation, not a guarantee of future resets. The evaluation target is the official announcement; verified execution timestamps were not available for a separate execution-time score.
-
-## What we learned
-
-Explainability is not an overlay added after forecasting. It changes the system design: evidence needs an origin, ambiguous text needs a non-probabilistic review state, policies need explicit validity boundaries, historical cutoffs need enforcement, and every displayed number needs a retained audit path. We also learned that a structurally correct causal split can matter more than making a single hazard model more aggressive.
-
-## What's next
-
-- Collect more prequential months without changing the frozen evaluation history.
-- Add reviewed negative signal windows and verified execution timestamps when authoritative sources exist.
-- Reassess calibration only after a larger sample is available.
-- Add another official social-source adapter behind the existing interface.
-- Enable production email delivery only after the Resend sender and webhook are fully configured and verified.
+**Promising but unvalidated.** V2 improved on v1 and the constant baseline in this cached month, but four announcements cannot establish general reliability. Historical simulation, not a guarantee of future resets. Verified execution timestamps were unavailable for a separate execution-time score.
 
 ## Three-minute judge walkthrough
 
-1. **0:00-0:25 - The question.** Open the cinematic hero, identify the 36-hour probability and uncertainty, and explain why quota timing matters.
-2. **0:25-0:55 - The evidence.** Scroll to Latest Signals and show that every post has a screening or impact state.
-3. **0:55-1:30 - The calculation.** Open Advanced Diagnostics and show policy-driven risk, signal-driven risk, the combined probability, feature origins, model version, cutoff, seed, and simulation count.
-4. **1:30-1:55 - The historical policy.** Show the verified milestone ledger and the distinction between full, banked, and scheduled announcements.
-5. **1:55-2:20 - The evaluation.** Present the v2 Brier result and lead times, then state the four-event limitation explicitly.
-6. **2:20-2:40 - The audit.** Open the public Data Lab and show source, extraction, forecast, and resource records.
-7. **2:40-3:00 - The offline proof.** Mention or run Demo Mode, inject a signal, and show deterministic movement without external credentials.
+1. **0:00–0:25 — Reset Released.** Show the latest completed event, its official timestamp and source, then explain that the previous forecast is resolved and a new cycle begins immediately.
+2. **0:25–0:45 — Live Reset Likelihood.** Explain that the primary cycle-aware score answers how elevated the overall reset situation appears now; it is not a calibrated probability.
+3. **0:45–1:05 — Reset Oracle v2.** Point to the separate calibrated 36-hour probability, credible interval, cutoff, seed, and evidence provenance.
+4. **1:05–1:25 — Evidence states.** Switch between Forecast-moving and Screened out to show active, excluded, expired, and previous-cycle evidence.
+5. **1:25–1:45 — Resolved trend.** Show the calibrated trend's 98% resolved-event marker and the visually separated active next cycle.
+6. **1:45–2:10 — Diagnostics.** Open the policy and signal record, model version, feature origins, uncertainty, and simulation count.
+7. **2:10–2:30 — Honest evaluation.** Present the v2 Brier result and lead times, then state the four-event limitation and “Promising but unvalidated” interpretation.
+8. **2:30–3:00 — Public audit.** Open the Data Lab and compare RESOLVED EVENT with ACTIVE NEXT-RESET FORECAST, including cycle cutoff and exclusions.
 
-## Submission media
+No production data mutation is required for this walkthrough.
 
-Repository-ready product images are under [`docs/readme/`](readme/). Use at most five in the Devpost gallery:
+## Devpost media reference
 
-1. `01-current-forecast.jpg` - current 36-hour forecast.
-2. `02-policy-model.jpg` - policy and signal branch explanation.
-3. `03-latest-signals.jpg` - public evidence and screening states.
-4. `04-reset-history.jpg` - verified milestone announcement ledger.
-5. `05-data-lab.jpg` - public technical record.
+Use the following current-production images from [`docs/readme/`](readme/). The recommended Devpost thumbnail is the first image.
+
+1. `01-current-forecast.jpg`
+
+   A confirmed reset closes the previous forecast and immediately starts a new operational cycle at a 30% baseline.
+
+2. `02-policy-model.jpg`
+
+   Two separate metrics: a cycle-aware Live Reset Likelihood and Reset Oracle v2s calibrated 36-hour probability.
+
+3. `03-latest-signals.jpg`
+
+   Forecast-moving and Screened out tabs keep active evidence visible while preserving irrelevant and expired posts for audit.
+
+4. `04-reset-history.jpg`
+
+   The calibrated trend preserves the resolved 98% reset event while separating the active forecast for the next cycle.
+
+5. `05-data-lab.jpg`
+
+   The Public Data Lab separates the resolved reset, active cycle, model inputs, exclusions, and audit records.
+
+- Preferred thumbnail ratio: **3:2**
+- Maximum Devpost file size: **5 MB**
+- Do not use the obsolete 69% image.
 
 ## Judge setup without credentials
 
@@ -130,8 +137,8 @@ npm ci
 npm run dev:demo
 ```
 
-Open <http://localhost:3000>. All fixture posts, forecasts, and emails are labeled Demo Data or Demo Email.
+Open <http://localhost:3000>. Fixture posts and forecasts are explicitly labeled Demo Data. Demo Mode demonstrates the offline architecture and does not claim to reproduce the current production reset event.
 
 ## Disclaimer
 
-Sacred Forecast / TiboReset is an unofficial experimental project. It is not affiliated with or endorsed by OpenAI or X. Its probability is a planning aid, not an official announcement or an account-level rollout promise.
+Sacred Forecast / TiboReset is an unofficial experimental project. It is not affiliated with or endorsed by OpenAI or X. Its metrics are planning aids, not official announcements or account-level rollout promises.

@@ -1,6 +1,6 @@
 # Three-minute demo script
 
-The complete judge flow works without X, OpenAI, Supabase, or Resend credentials.
+The no-credential judge path works without X, OpenAI, or Supabase credentials. Demo posts and forecasts are synthetic fixtures and remain explicitly labeled; they should not be presented as the current production reset event.
 
 ## Start
 
@@ -9,42 +9,50 @@ npm ci
 npm run dev:demo
 ```
 
-Open <http://localhost:3000>. Point out the **Demo Mode** label before using any fixture evidence.
+Open <http://localhost:3000> and point out the **Demo Mode** label before using fixture evidence. For the current live story, use <https://tiboreset.vercel.app> and the read-only <https://tiboreset.vercel.app/lab/data>.
 
-## Walkthrough
+## Production walkthrough
 
-### 0:00-0:25 - Arrival and current answer
+### 0:00–0:25 — Reset Released and the new cycle
 
-Scroll through the cinematic reveal. Identify the current 36-hour probability, likely interval, horizon, trend, and freshness. Explain the user decision: spend, save, or queue quota-heavy Codex work.
+Open the production hero. Show the latest official completed reset, its timestamp and source, then explain that it resolved the previous forecast and immediately began a new active cycle.
 
-### 0:25-0:55 - Evidence, not a generated percentage
+### 0:25–0:45 — Live Reset Likelihood
 
-Open **Latest Signals**. Show that each post has an event type, confidence or screening state, review state, and forecast impact. State that obvious irrelevant posts are screened locally and ambiguous wording receives zero automatic impact.
+Explain that the primary 30–98 score is cycle-aware and operational. It combines cycle timing, verified history, Reset Oracle v2, and structured current signals. It is not statistically calibrated.
 
-### 0:55-1:30 - Reset Oracle v2
+### 0:45–1:05 — Calibrated 36-hour probability
 
-Open **Advanced Diagnostics**. Show policy-driven risk, signal-driven risk, and the combined probability. Point to the model version, cutoff, seed, 5,000 simulations, feature origins, and contribution ranking.
+Point to Reset Oracle v2's separate calibrated probability, credible interval, rolling horizon, model version, cutoff, and deterministic simulation record. The two values answer different questions.
 
-State clearly: GPT-5.6 extracts structured evidence. Reset Oracle v2 calculates the probability.
+State clearly: GPT-5.6 extracts structured, reviewable evidence. Deterministic TypeScript calculates both final metrics.
 
-### 1:30-1:55 - Verified reset history
+### 1:05–1:25 — Forecast-moving versus Screened out
 
-Show the 3M-9M ledger. Highlight the distinction between full, banked, and scheduled announcements and explain that announcement times are not presented as execution times.
+Switch between the Latest Signals tabs. Show that active evidence remains concise while irrelevant, expired, review-blocked, and previous-cycle posts remain inspectable without affecting the current cycle.
 
-### 1:55-2:20 - Honest evaluation
+### 1:25–1:45 — Calibrated trend and resolution marker
 
-Show the cached one-month backtest record. V2's strict pre-announcement Brier score is 0.1127 versus 0.1522 for v1 and 0.1320 for the constant baseline. It crossed 30% before two of four announcements and 50% before one.
+Open the calibrated probability trend. Show the historical rise to the resolved 98% event and its RESET RELEASED marker. Explain that the active next-cycle forecast is separated rather than fabricated as a continuation of the completed event.
 
-Use the required interpretation: **Promising but unvalidated.** Four announcements cannot establish general reliability.
+### 1:45–2:10 — Policy and signal diagnostics
 
-### 2:20-2:40 - Public audit trail
+Open **Advanced Diagnostics**. Show the active cycle, calibrated model version, policy and signal components, credible interval, seed, 5,000 simulations, evidence cutoff, and feature origins.
 
-Open `/lab/data`. Show the read-only source, extraction, milestone, forecast, feature-origin, backtest, and X-resource records. Operational controls and secrets are not public.
+### 2:10–2:30 — Honest historical evaluation
 
-### 2:40-3:00 - Offline movement and alerts
+Show the cached one-month backtest. Reset Oracle v2's strict pre-announcement Brier score is 0.1127 versus 0.1522 for v1 and 0.1320 for the constant baseline. It crossed 30% before two of four announcements and 50% before one.
 
-Open `/control-room` in Demo Mode. Inject the demo signal, show the deterministic forecast change, and demonstrate the labeled Demo Email outbox and deduplication. Do not describe this as an externally delivered email.
+Use the required interpretation: **Promising but unvalidated.** Four announcements cannot establish general reliability. The Live Reset Likelihood is not part of this Brier-score comparison.
+
+### 2:30–3:00 — Public Data Lab
+
+Open `/lab/data`. Compare **RESOLVED EVENT** with **ACTIVE NEXT-RESET FORECAST**. Show the latest reset source, active cycle start, calibrated and operational values, excluded pre-cycle evidence, and audit cutoff. Operational controls and secrets are not public.
+
+## Demo Mode note
+
+Demo Mode remains useful for an offline walkthrough of synthetic ingestion, extraction, deterministic recalculation, charts, and audit records. Keep fixture provenance visible and do not claim that its state mirrors the live July 18 reset unless the fixtures explicitly do so.
 
 ## Close
 
-Sacred Forecast is an unofficial planning aid. It is not affiliated with OpenAI or X, and its historical simulation is not a guarantee of future resets.
+Sacred Forecast is an unofficial planning aid. It is not affiliated with OpenAI or X. Reset Oracle v2's historical simulation is not a guarantee of future resets, and Live Reset Likelihood is an operational score rather than a calibrated probability.
