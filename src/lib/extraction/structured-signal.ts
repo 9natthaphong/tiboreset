@@ -31,5 +31,7 @@ export function structuredSignalFromStored(input: {
     uncertainties: strings(input.payload.uncertainties),
     resetConfirmed: input.payload.reset_confirmed === true && hasExplicitCompletedOperationalReset(input.text),
     resetType: resetType as StructuredSignal["resetType"],
+    policyScope: (typeof input.payload.policy_scope === "string" ? input.payload.policy_scope : local.policy_scope) as StructuredSignal["policyScope"],
+    policyPersistence: (typeof input.payload.policy_persistence === "string" ? input.payload.policy_persistence : local.policy_persistence) as StructuredSignal["policyPersistence"],
   };
 }

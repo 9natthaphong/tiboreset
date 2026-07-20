@@ -12,6 +12,8 @@ For the current public snapshot, a stored extraction is not trusted as a complet
 
 The current hybrid score is derived read-only from the same cutoff, calibrated forecast context, reset history, and evidence used by the public API and Data Lab. It is not a page-local estimate and is not written into the calibrated forecast row. The latest persisted forecast ID and probability remain attached as an audit reference. Failure to build the canonical Live snapshot produces an unavailable state rather than a fabricated hybrid value.
 
+Long-lived reset-policy state is derived from the newest applicable stored structured extraction. The record exposes its source post, activation and expiry timestamps, confidence, reason, score floor, cap, decay factor, and calibrated counterfactual delta. The prior extraction remains in `extracted_events` when a post is safely reprocessed; no historical row is overwritten.
+
 ## Human-reviewed historical records
 
 Historical reset claims enter only through:

@@ -10,6 +10,7 @@ const basePoints: Record<StructuredSignalType, number> = {
   milestone_progress: 6,
   milestone_commitment: 20,
   limit_policy_change: 12,
+  reset_policy_continuation: 0,
   near_term_reset_commitment: 25,
   reset_confirmation: 0,
   negative_or_delaying_signal: -10,
@@ -44,8 +45,9 @@ function contributionFor(signal: HybridSignalInput, cutoff: string, cycleStartAt
     confidenceFactor: confidence,
     recencyFactor: recency,
   };
-  if (cycleStartAt && Date.parse(signal.postedAt) <= Date.parse(cycleStartAt)) return { ...common, direction: "contextual", appliedPoints: 0, bucket: "screened_out", exclusionReason: "before_cycle_start", reason: "Evidence predates the active reset cycle." };
   if (signal.signal.requiresReview || signal.verificationStatus === "needs_review") return { ...common, direction: "contextual", appliedPoints: 0, bucket: "screened_out", exclusionReason: "requires_review", reason: "Review-blocked evidence cannot change the active score." };
+  if (type === "reset_policy_continuation" && signal.signal.policyPersistence === "active") return { ...common, direction: "raised", appliedPoints: 0, bucket: "forecast_moving", exclusionReason: null, reason: "An ongoing official reset-policy regime is scored as a persistent floor, not a transient point addition." };
+  if (cycleStartAt && Date.parse(signal.postedAt) <= Date.parse(cycleStartAt)) return { ...common, direction: "contextual", appliedPoints: 0, bucket: "screened_out", exclusionReason: "before_cycle_start", reason: "Evidence predates the active reset cycle." };
   if (type === "irrelevant") return { ...common, direction: "contextual", appliedPoints: 0, bucket: "screened_out", exclusionReason: "irrelevant", reason: "The post was screened as unrelated." };
   if (recency <= 0) return { ...common, direction: "contextual", appliedPoints: 0, bucket: "screened_out", exclusionReason: "expired", reason: "The signal is outside the 36-hour active window." };
   if (type === "reset_confirmation") return { ...common, direction: "confirmed", appliedPoints: 0, bucket: "screened_out", exclusionReason: "previous_cycle_resolved", reason: "The completed reset closed the previous cycle and does not score the next cycle." };

@@ -10,6 +10,7 @@ export type StructuredSignalType =
   | "milestone_progress"
   | "milestone_commitment"
   | "limit_policy_change"
+  | "reset_policy_continuation"
   | "near_term_reset_commitment"
   | "reset_confirmation"
   | "negative_or_delaying_signal";
@@ -26,6 +27,8 @@ export type StructuredSignal = {
   uncertainties: string[];
   resetConfirmed: boolean;
   resetType: "full" | "banked" | "scheduled" | "announcement_only" | "temporary_limit_change" | "unknown" | "none";
+  policyScope?: "none" | "ongoing";
+  policyPersistence?: "none" | "active" | "uncertain" | "withdrawn";
 };
 
 export type HybridSignalInput = {
@@ -79,7 +82,7 @@ export type CycleEstimate = {
 };
 
 export type HybridLikelihood = CycleEstimate & {
-  hybridModelVersion: "sacred-likelihood-1.0.0";
+  hybridModelVersion: "sacred-likelihood-1.1.0";
   hybridScore: number;
   hybridState: HybridState;
   cyclePoints: number;
@@ -99,6 +102,19 @@ export type HybridLikelihood = CycleEstimate & {
   eventResolutionStatus: "resolved" | "none";
   activeSignals: SignalContribution[];
   excludedSignals: SignalContribution[];
+  policyRegimeState: "inactive" | "reset_policy_active" | "reset_policy_uncertain" | "reset_policy_withdrawn";
+  policyRegimeSourcePostId: string | null;
+  policyRegimeActivatedAt: string | null;
+  policyRegimeExpiresAt: string | null;
+  policyRegimeConfidence: number;
+  policyRegimeReason: string;
+  policyRegimeScoreFloor: number;
+  policyRegimeCap: number;
+  policyContinuationBoost: number;
+  policyRegimeEffectivePoints: number;
+  policyRegimeAgeHours: number | null;
+  policyRegimeDecayFactor: number;
+  policyRegimeCalibratedCounterfactualDeltaPercentagePoints: number | null;
 };
 
 export type HybridLikelihoodInput = {

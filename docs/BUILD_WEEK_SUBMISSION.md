@@ -24,6 +24,7 @@ Codex users have limited capacity, and reset timing can change whether a develop
 - Uses GPT-5.6 through the OpenAI Responses API to extract strict, reviewable evidence from candidate posts.
 - Blocks jokes, questions, metaphors, uncertain statements, and review-gated evidence from changing either metric automatically.
 - Calculates a primary 30–98 Live Reset Likelihood from cycle timing, verified history, Reset Oracle v2, and structured current signals. This operational score is not calibrated.
+- Preserves a clear official continuing-reset policy across cycle boundaries for up to seven days, while capping policy-only likelihood because the statement supplies no timing.
 - Preserves Reset Oracle v2 as a separate calibrated 36-hour probability with a credible interval and 5,000 deterministic seeded simulations.
 - Resolves the previous cycle when a completed reset is verified, preserves the event for audit, and starts the next cycle immediately from a 30 baseline.
 - Exposes Forecast-moving and Screened out evidence, model provenance, resolved-event history, and active-cycle state through a public read-only Data Lab.

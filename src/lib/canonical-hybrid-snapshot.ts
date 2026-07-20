@@ -34,6 +34,7 @@ export type LoadedCanonicalHybridSnapshot = CanonicalHybridSnapshot & {
   posts: CanonicalPostRecord[];
   account: { username: string; displayName: string; profileImageUrl: string | null };
   lastUpdatedAt: string;
+  context: ForecastContext;
 };
 
 const validDate = (value: unknown): value is string => typeof value === "string" && Number.isFinite(Date.parse(value));
@@ -49,7 +50,13 @@ function verificationStatus(post: z.infer<typeof postSchema>, event: z.infer<typ
     && event.requires_review !== true
     && event.extraction_confidence >= .9
     && hasExplicitCompletedOperationalReset(post.text);
-  return { signal, completed };
+  const verifiedPolicyContinuation = signal.signalType === "reset_policy_continuation"
+    && signal.policyPersistence === "active"
+    && signal.sourceAuthority === "monitored_official"
+    && !signal.requiresReview
+    && event.requires_review !== true
+    && event.extraction_confidence >= .85;
+  return { signal, completed, verifiedPolicyContinuation };
 }
 
 function cutoffFrom(run: { completed_at?: unknown; metadata?: unknown } | null, forecast: { generated_at?: unknown } | null) {
@@ -140,6 +147,8 @@ export async function loadCanonicalHybridSnapshot(providedClient?: SupabaseClien
           uncertainties: local.uncertainties,
           resetConfirmed: local.reset_confirmed,
           resetType: local.reset_type,
+          policyScope: local.policy_scope,
+          policyPersistence: local.policy_persistence,
         },
         verificationStatus: local.requires_review ? "needs_review" : "structured",
       };
@@ -148,7 +157,7 @@ export async function loadCanonicalHybridSnapshot(providedClient?: SupabaseClien
       continue;
     }
     const verified = verificationStatus(post, event);
-    const status = event.requires_review === true ? "needs_review" as const : verified.completed ? "verified" as const : "structured" as const;
+    const status = event.requires_review === true ? "needs_review" as const : verified.completed || verified.verifiedPolicyContinuation ? "verified" as const : "structured" as const;
     const signal: HybridSignalInput = { id: event.id, postId: post.platform_post_id, text: post.text, postedAt: post.posted_at, sourceUrl: post.post_url ?? `https://x.com/i/status/${post.platform_post_id}`, signal: verified.signal, verificationStatus: status };
     signals.push(signal);
     postRecords.push({ ...post, extraction: event, signal });
@@ -169,7 +178,7 @@ export async function loadCanonicalHybridSnapshot(providedClient?: SupabaseClien
     persistedForecast = persistedForecasts[0] ?? null;
   }
   const snapshot = buildCanonicalHybridSnapshot({ cutoff, evidence, signals, resetEvents, context, persistedForecast, persistedForecasts, simulations: Number(process.env.MONTE_CARLO_SIMULATIONS ?? 5000), seed: Number(process.env.MONTE_CARLO_SEED ?? 20260716) });
-  return { ...snapshot, mode: "live", posts: postRecords, account: { username: String(accountResult.data.username), displayName: String(accountResult.data.display_name ?? accountResult.data.username), profileImageUrl: typeof accountResult.data.profile_image_url === "string" ? accountResult.data.profile_image_url : null }, lastUpdatedAt: String(postRecords[0]?.ingested_at ?? postRecords[0]?.posted_at ?? cutoff) };
+  return { ...snapshot, mode: "live", posts: postRecords, account: { username: String(accountResult.data.username), displayName: String(accountResult.data.display_name ?? accountResult.data.username), profileImageUrl: typeof accountResult.data.profile_image_url === "string" ? accountResult.data.profile_image_url : null }, lastUpdatedAt: String(postRecords[0]?.ingested_at ?? postRecords[0]?.posted_at ?? cutoff), context };
 }
 
 export function canLoadCanonicalHybridSnapshot() {

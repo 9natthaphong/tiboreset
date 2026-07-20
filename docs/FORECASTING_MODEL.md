@@ -102,8 +102,22 @@ These are communication labels, not accuracy claims.
 
 ## Live Reset Likelihood state boundary
 
-Sacred Likelihood (`sacred-likelihood-1.0.0`) is a separate operational score. In a normal cycle it combines a 30-point baseline with monotonic cycle pressure, a cooldown-gated contribution from Reset Oracle v2, capped and decayed structured signals, and negative evidence. Normal values are clamped to 30-94.
+Sacred Likelihood (`sacred-likelihood-1.1.0`) is a separate operational score. In a normal cycle it combines a 30-point baseline with monotonic cycle pressure, a cooldown-gated contribution from Reset Oracle v2, capped and decayed transient signals, negative evidence, and an independently inspectable continuing-policy regime. Normal values remain non-calibrated.
 
-A verified official completed full or banked reset immediately closes the previous forecast cycle. Its timestamp becomes `cycleStartAt`, `hybridState` becomes `new_cycle`, and the active Live Reset Likelihood starts at exactly 30. The completed confirmation is retained as a resolved event but contributes zero to current `signalPoints`; all evidence at or before the new boundary is excluded.
+A verified official completed full or banked reset immediately closes the previous forecast cycle. Its timestamp becomes `cycleStartAt`, `hybridState` becomes `new_cycle`, and the ordinary active-cycle baseline starts at exactly 30. The completed confirmation is retained as a resolved event but contributes zero to current `signalPoints`; transient evidence at or before the boundary is excluded.
 
-The calibrated Reset Oracle v2 probability remains a separate result. The resolved 98% confirmation forecast stays in the stored audit history, while the active probability is rebuilt from new-cycle, cutoff-safe evidence. The public trend marks the reset release and does not connect the resolved point to a fabricated historical hybrid series.
+### Continuing reset-policy regime
+
+A clear monitored-official statement that resets will continue activates `reset_policy_active`. It is high policy relevance but low time immediacy: it is neither confirmation nor a near-term commitment. Full regime strength lasts 72 hours, then decays smoothly to zero at seven days unless refreshed. A newer withdrawal such as “No more resets” supersedes it immediately, and repeated compatible statements never stack.
+
+The regime uses a max/floor operation rather than adding a flat 30 points:
+
+```text
+ordinaryHybrid = 30 + cycle + historical + transient - negative
+policyFloor = 30 + policyContinuationBoost
+scoreBeforeCap = max(ordinaryHybrid, policyFloor)
+```
+
+A fresh, explicit, high-confidence official continuation produces a 30-point boost and a floor of 60. Without credible timing evidence the result is capped at 80. Operational work with timing or a milestone commitment may lift that cap; only a credible near-term commitment produces 95. The 72-hour window, seven-day expiry, 30-point maximum boost, and 80 cap are expert product priors, not learned parameters.
+
+The calibrated Reset Oracle v2 probability remains a separate result. A continuing-policy statement can enter its normal public-commitment feature path and is measured with a no-write counterfactual, but it never receives a fixed probability addition or override. The resolved 98% confirmation forecast stays in stored audit history, while the active probability is rebuilt from cutoff-safe evidence.

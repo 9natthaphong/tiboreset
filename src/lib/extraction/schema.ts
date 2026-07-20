@@ -7,7 +7,7 @@ export const eventTypes = [
 
 export const structuredSignalTypes = [
   "irrelevant", "general_update", "operator_intervention", "operational_work_underway", "reset_hint",
-  "milestone_progress", "milestone_commitment", "limit_policy_change", "near_term_reset_commitment",
+  "milestone_progress", "milestone_commitment", "limit_policy_change", "reset_policy_continuation", "near_term_reset_commitment",
   "reset_confirmation", "negative_or_delaying_signal",
 ] as const;
 
@@ -36,6 +36,8 @@ export const ExtractionSchema = z.object({
   operator_intervention_strength: z.number().min(0).max(1),
   time_immediacy: z.enum(["none", "low", "moderate", "high", "immediate"]),
   source_authority: z.enum(["monitored_official", "official", "unknown"]),
+  policy_scope: z.enum(["none", "ongoing"]),
+  policy_persistence: z.enum(["none", "active", "uncertain", "withdrawn"]),
 }).strict();
 
 export const ExtractionJsonSchema = z.toJSONSchema(ExtractionSchema, { target: "draft-7" });

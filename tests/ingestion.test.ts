@@ -84,6 +84,14 @@ describe("bounded live ingestion", () => {
     expect(repository.extractions[0].result.fallbackReason).toBe("OpenAI extraction failed");
   });
 
+  it("sends clear plural reset-policy continuation language to structured extraction", async () => {
+    const source = new MemorySource([post("121", "@CastAsHuman Don’t really mind it! The resets will continue")]);
+    const extractor = vi.fn(localResult);
+    await runIngestion({ repository, source, username: "thsottiaux", localExtract, extractRelevant: extractor });
+    expect(extractor).toHaveBeenCalledTimes(1);
+    expect(repository.extractions[0].result.extraction).toMatchObject({ signal_type: "reset_policy_continuation", requires_review: false, reset_confirmed: false });
+  });
+
   it("does not analyze an unchanged post twice", async () => {
     const source = new MemorySource([post("130", "reset soon")]);
     const extractor = vi.fn(localResult);

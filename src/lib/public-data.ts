@@ -18,6 +18,7 @@ import { forecastFreshness } from "@/lib/forecasting/current-refresh";
 import { loadCanonicalHybridSnapshot, type LoadedCanonicalHybridSnapshot } from "@/lib/canonical-hybrid-snapshot";
 import { calculateHybridLikelihood, type HybridLikelihood, type HybridResetEvent, type HybridSignalInput } from "@/lib/hybrid-likelihood";
 import { localExtract } from "@/lib/extraction/local";
+import { selectCanonicalLatestSignals } from "@/lib/latest-signals-selection";
 
 const eventTypes = ["explicit_reset_confirmation","reset_hint","milestone_commitment","milestone_progress","usage_incident","capacity_signal","limit_policy_change","product_launch","promotion","community_poll","general_codex_update","irrelevant"] as const;
 const eventTypeSchema = z.enum(eventTypes);
@@ -67,18 +68,19 @@ function demoHybrid(): HybridLikelihood {
   const resetEvents: HybridResetEvent[] = demoResetHistory().filter(item => item.type === "full" || item.type === "banked").map(item => ({ id: item.id, occurredAt: item.date, resetType: item.type as "full" | "banked", verified: true, sourcePostId: item.sourcePostId, sourceUrl: item.sourceUrl }));
   const signals: HybridSignalInput[] = state().evidence.map(item => {
     const extraction = localExtract(item.excerpt);
-    return { id: item.id, postId: item.postId, text: item.excerpt, postedAt: item.postedAt, sourceUrl: item.url, verificationStatus: item.verified ? "verified" : extraction.requires_review ? "needs_review" : "structured", signal: { signalType: extraction.signal_type, operationalRelevance: extraction.operational_relevance, resetIntentStrength: extraction.reset_intent_strength, operatorInterventionStrength: extraction.operator_intervention_strength, timeImmediacy: extraction.time_immediacy, sourceAuthority: "monitored_official", extractionConfidence: item.confidence, requiresReview: extraction.requires_review, uncertainties: extraction.uncertainties, resetConfirmed: extraction.reset_confirmed, resetType: extraction.reset_type } };
+    return { id: item.id, postId: item.postId, text: item.excerpt, postedAt: item.postedAt, sourceUrl: item.url, verificationStatus: item.verified ? "verified" : extraction.requires_review ? "needs_review" : "structured", signal: { signalType: extraction.signal_type, operationalRelevance: extraction.operational_relevance, resetIntentStrength: extraction.reset_intent_strength, operatorInterventionStrength: extraction.operator_intervention_strength, timeImmediacy: extraction.time_immediacy, sourceAuthority: "monitored_official", extractionConfidence: item.confidence, requiresReview: extraction.requires_review, uncertainties: extraction.uncertainties, resetConfirmed: extraction.reset_confirmed, resetType: extraction.reset_type, policyScope: extraction.policy_scope, policyPersistence: extraction.policy_persistence } };
   });
   return calculateHybridLikelihood({ forecast, resetEvents, signals, now: forecast.dataCutoff });
 }
 
 function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit = 20): LatestPostsResponse {
   const contributions = new Map([...snapshot.hybrid.activeSignals, ...snapshot.hybrid.excludedSignals].map(item => [item.postId, item]));
+  const selectedPosts = selectCanonicalLatestSignals({ posts: snapshot.posts, activePostIds: snapshot.hybrid.activeSignals.map(item => item.postId), policySourcePostId: snapshot.hybrid.policyRegimeSourcePostId, resolvedPostId: snapshot.hybrid.confirmation?.sourcePostId, limit });
   return {
     mode: "live",
     lastUpdatedAt: snapshot.lastUpdatedAt,
     account: snapshot.account,
-    posts: snapshot.posts.slice(0, limit).map(post => {
+    posts: selectedPosts.map(post => {
       const contribution = contributions.get(post.platform_post_id);
       const event = post.extraction;
       const metrics = post.public_metrics ?? {};
@@ -98,8 +100,8 @@ function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit
         wasAnalyzed: Boolean(event),
         metrics: { likes: asMetric(metrics.like_count), reposts: asMetric(metrics.retweet_count), replies: asMetric(metrics.reply_count) },
         signalType: signal.signal.signalType,
-        hybridContributionPoints: contribution?.appliedPoints ?? 0,
-        probabilityCounterfactualDeltaPercentagePoints: null,
+        hybridContributionPoints: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeEffectivePoints : contribution?.appliedPoints ?? 0,
+        probabilityCounterfactualDeltaPercentagePoints: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeCalibratedCounterfactualDeltaPercentagePoints : null,
         signalBucket: contribution?.bucket ?? "screened_out",
         signalReason: contribution?.reason ?? "No active structured signal.",
         recencyFactor: contribution?.recencyFactor ?? 0,
@@ -107,6 +109,12 @@ function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit
         resetType: signal.signal.signalType === "reset_confirmation" && (signal.signal.resetType === "full" || signal.signal.resetType === "banked") ? signal.signal.resetType : null,
         resolvedAt: contribution?.exclusionReason === "previous_cycle_resolved" ? post.posted_at : null,
         cycleStatus: contribution?.exclusionReason === "previous_cycle_resolved" ? "previous_cycle_resolved" : contribution?.exclusionReason === "before_cycle_start" ? "historical" : "active_cycle",
+        policyRegimeState: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeState : undefined,
+        policyRegimeActivatedAt: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeActivatedAt : null,
+        policyRegimeExpiresAt: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeExpiresAt : null,
+        policyRegimeScoreFloor: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeScoreFloor : null,
+        policyRegimeCap: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeCap : null,
+        policyRegimeDecayFactor: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeDecayFactor : null,
       } satisfies LatestPost;
     }),
   };

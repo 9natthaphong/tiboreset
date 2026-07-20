@@ -28,6 +28,12 @@ export type LatestPost = {
   resetType?: "full" | "banked" | null;
   resolvedAt?: string | null;
   cycleStatus?: "active_cycle" | "previous_cycle_resolved" | "historical";
+  policyRegimeState?: "inactive" | "reset_policy_active" | "reset_policy_uncertain" | "reset_policy_withdrawn";
+  policyRegimeActivatedAt?: string | null;
+  policyRegimeExpiresAt?: string | null;
+  policyRegimeScoreFloor?: number | null;
+  policyRegimeCap?: number | null;
+  policyRegimeDecayFactor?: number | null;
 };
 
 export type LatestPostsResponse = {

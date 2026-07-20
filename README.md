@@ -31,6 +31,7 @@ Codex users work within limited usage capacity. Reset timing can determine wheth
 | Capability | What it gives the user |
 | --- | --- |
 | Live Reset Likelihood | A primary, cycle-aware operational score from 30–98; it is not statistically calibrated |
+| Continuing-policy regime | A clear official statement that resets will continue creates a seven-day, non-stacking score floor with no implied timing |
 | Reset Oracle v2 | A separate calibrated probability of an official reset announcement inside the next rolling 36 hours |
 | Public-signal monitoring | Incremental, deduplicated posts from the configured official X account |
 | Structured extraction | Reviewable evidence from candidate posts; obvious irrelevant posts are screened locally |
@@ -116,7 +117,7 @@ flowchart TD
 1. An official completed-reset announcement resolves the previous forecast.
 2. Its source, reset type, timestamp, and previous resolved state remain auditable.
 3. The completed event is excluded from the next-cycle signal score.
-4. Evidence posted before the reset contributes zero to the new active cycle.
+4. Transient evidence posted before the reset contributes zero to the new active cycle. A still-current official policy-continuation regime can cross the boundary because it describes future resets rather than the completed event.
 5. A new cycle begins immediately from an operational baseline of 30.
 6. The active snapshot then estimates another future reset.
 
@@ -177,6 +178,10 @@ Codex was used for repository implementation, schema and API work, deterministic
 For candidate posts only, GPT-5.6 converts public text into strict, reviewable fields such as event type, reset type, confidence, evidence excerpts, uncertainties, and review status. The local relevance screen avoids model calls for obvious irrelevant posts, and a deterministic safety layer prevents ambiguous evidence from changing either metric automatically.
 
 GPT-5.6 never outputs Live Reset Likelihood or the calibrated probability. Deterministic TypeScript calculates both.
+
+### Long-lived reset policy
+
+An explicit official statement that resets will continue is classified as `reset_policy_continuation`, not a hint, near-term commitment, or confirmation. Sacred Likelihood 1.1 keeps the newest compatible statement at full strength for 72 hours, decays it until seven-day expiry, and lets a contradictory official statement supersede it immediately. A fresh high-confidence statement creates a score floor near 60, but policy continuation alone cannot exceed 80 because it provides no timing. These durations and bounds are transparent expert product priors, not statistically learned parameters.
 
 ## Judge quick start
 
