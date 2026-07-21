@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHistory, importHistoricalSeeds, loadHistoricalDatasets, sourceManifestSchema, type HistoricalDatasets, type KnownResetSeedRow } from "@/lib/historical-data";
+import { extractMilestoneUsers, findHistoricalAnalogWindows, historicalCalibrationRows, historicalDatasetSummary, historicalSeedResetHistory, importHistoricalSeeds, loadHistoricalDatasets, sourceManifestSchema, type HistoricalDatasets, type KnownResetSeedRow } from "@/lib/historical-data";
 
 describe("human-verified historical seeds", () => {
   it("loads all three version-controlled files with strict schemas", () => {
@@ -51,5 +51,35 @@ describe("human-verified historical seeds", () => {
     expect(datasets.windows.windows).toHaveLength(7);
     expect(datasets.windows.windows.every(window => window.observationWindow === "positive" && window.forecastBefore === null && window.forecastAfter === null && window.resetFollowedWithinHorizon === null)).toBe(true);
     expect(datasets.ledger.records.some(record => record.milestoneUsers < 3_000_000)).toBe(false);
+  });
+
+  it("keeps analog selection cutoff-safe, verified-only, similarity-ranked, and limited to three", () => {
+    const datasets = loadHistoricalDatasets();
+    const base = datasets.windows.windows[0];
+    const windows: HistoricalDatasets["windows"]["windows"] = [
+      { ...base, id: "00000000-0000-4000-8000-000000000101", eventAt: "2026-06-01T00:00:00.000Z", featureVector: { x: 1 } },
+      { ...base, id: "00000000-0000-4000-8000-000000000102", eventAt: "2026-06-02T00:00:00.000Z", featureVector: { x: 0.8, y: 0.6 } },
+      { ...base, id: "00000000-0000-4000-8000-000000000103", eventAt: "2026-06-03T00:00:00.000Z", featureVector: { x: 0.6, y: 0.8 } },
+      { ...base, id: "00000000-0000-4000-8000-000000000104", eventAt: "2026-06-04T00:00:00.000Z", featureVector: { x: 0.4, y: 0.92 } },
+      { ...base, id: "00000000-0000-4000-8000-000000000105", eventAt: "2026-08-01T00:00:00.000Z", featureVector: { x: 1 } },
+      { ...base, id: "00000000-0000-4000-8000-000000000106", eventAt: "2026-06-05T00:00:00.000Z", verificationStatus: "unverified" as const, featureVector: { x: 1 } },
+    ];
+    const result = findHistoricalAnalogWindows({ x: 1 }, "2026-07-01T00:00:00.000Z", {
+      ...datasets,
+      windows: { ...datasets.windows, windows },
+    });
+
+    expect(result.map(item => item.id)).toEqual([
+      "00000000-0000-4000-8000-000000000101",
+      "00000000-0000-4000-8000-000000000102",
+      "00000000-0000-4000-8000-000000000103",
+    ]);
+    expect(result.every(item => item.verificationStatus === "verified" && Date.parse(item.eventAt) <= Date.parse("2026-07-01T00:00:00.000Z"))).toBe(true);
+  });
+
+  it("excludes unscored analog windows from calibration instead of inventing outcomes", () => {
+    const datasets = loadHistoricalDatasets();
+    expect(datasets.windows.windows.every(window => window.forecastBefore === null && window.resetFollowedWithinHorizon === null)).toBe(true);
+    expect(historicalCalibrationRows(datasets)).toEqual([]);
   });
 });

@@ -150,6 +150,8 @@ The coefficients are expert priors, not statistically trained parameters. See [F
 
 This evaluation applies to Reset Oracle v2 only. The operational Reset Watch Score has not been added to the Brier-score comparison.
 
+Historical analog percentages are cosine-similarity scores used only as supporting context. Unscored analog windows are excluded from performance evaluation and do not affect the published calibration result.
+
 | Measure | Strict pre-announcement result |
 | --- | ---: |
 | Evaluation period | 17 June–17 July 2026 |

@@ -89,7 +89,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
 
       gsap.set(media, { scale: 1.015, filter: "brightness(.38) saturate(.68)" });
       gsap.set(title, { autoAlpha: 1, y: 0, scale: 1 });
-      gsap.set(probability, { autoAlpha: 0, y: 28, scale: 0.985, filter: "blur(8px)" });
+      gsap.set(probability, { autoAlpha: 0, y: 28, filter: "blur(8px)" });
       gsap.set([resolution, support, payoff], { autoAlpha: 0, y: 24 });
       gsap.set(atmosphere, { autoAlpha: 0.08, scale: 0.86 });
       gsap.set(foreground, { autoAlpha: 0.72, yPercent: 0 });
@@ -106,14 +106,14 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
         .to(media, { scale: 1.032, filter: "brightness(.52) saturate(.78)", duration: 0.30 }, 0.15)
         .to(scrollCue, { autoAlpha: 0, y: 10, duration: 0.12 }, 0.18)
         .to(title, { autoAlpha: 0.64, y: -24, scale: 0.98, duration: 0.20 }, 0.30)
-        .to(probability, { autoAlpha: 1, y: 0, scale: 1.04, filter: "blur(0px)", duration: 0.17 }, 0.38)
+        .to(probability, { autoAlpha: 1, y: 0, filter: "blur(0px)", duration: 0.17 }, 0.38)
         .to(media, { scale: 1.052, filter: "brightness(.78) saturate(.96)", duration: 0.33 }, 0.45)
         .to(atmosphere, { autoAlpha: 0.72, scale: 1.08, duration: 0.30 }, 0.46)
         .to(resolution, { autoAlpha: 1, y: 0, duration: 0.18 }, 0.50)
         .to(support, { autoAlpha: 1, y: 0, duration: 0.20 }, 0.54)
         .to(support ? Array.from(support.children) : [], { autoAlpha: 1, y: 0, stagger: 0.025, duration: 0.12 }, 0.55)
         .to(title, { autoAlpha: 0.9, y: -30, duration: 0.16 }, 0.67)
-        .to(probability, { scale: 1.08, duration: 0.14 }, 0.70)
+        .to(section.querySelector(".hero-watch-score-number"), { textShadow: "0 0 52px rgba(217, 164, 65, .26)", duration: 0.14 }, 0.70)
         .to(media, { scale: 1.06, filter: "brightness(.92) saturate(1.04)", duration: 0.12 }, 0.72)
         .to(foreground, { autoAlpha: 0.34, yPercent: -5, duration: 0.14 }, 0.72)
         .to(payoff, { autoAlpha: 1, y: 0, duration: 0.16 }, 0.78)
@@ -340,10 +340,13 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
         </aside>}
         <div className="hero-story-probability">
           <span>RESET WATCH SCORE</span>
-          <strong data-testid="hero-watch-score">{hybridStatus === "available" && hybrid ? hybrid.watchScore : "—"}{hybridStatus === "available" && <small>/ 100</small>}</strong>
+          <div className="hero-watch-value" data-testid="hero-watch-value">
+            <strong className="hero-watch-score-number" data-testid="hero-watch-score">{hybridStatus === "available" && hybrid ? hybrid.watchScore : "—"}</strong>
+            {hybridStatus === "available" && <span className="hero-watch-denominator" data-testid="hero-watch-denominator" aria-label="out of one hundred">/ 100</span>}
+          </div>
           <p><b>{resetReleased ? "New reset cycle" : "Current readiness"}</b><small>An operational readiness score, not a probability.</small></p>
-          <div className="hero-policy-state"><span>RESET POLICY</span><b>{hybrid?.policyRegimeState === "reset_policy_active" ? "ACTIVE" : hybrid?.policyRegimeState === "reset_policy_withdrawn" ? "WITHDRAWN" : hybrid?.policyRegimeState === "reset_policy_uncertain" ? "UNCERTAIN" : "INACTIVE"}</b><small>Evidence confidence {hybrid ? percentage(hybrid.policyRegimeConfidence) : 0}%</small></div>
-          <div className="hero-calibrated-probability"><span>CALIBRATED NEXT-{forecast.horizonHours}H PROBABILITY</span><b data-testid="hero-calibrated-probability">{percentage(forecast.probability)}%</b><small>{percentage(forecast.credibleIntervalLow)}–{percentage(forecast.credibleIntervalHigh)}%</small></div>
+          <div className="hero-policy-state" data-testid="hero-policy-row"><span>RESET POLICY</span><b>{hybrid?.policyRegimeState === "reset_policy_active" ? "ACTIVE" : hybrid?.policyRegimeState === "reset_policy_withdrawn" ? "WITHDRAWN" : hybrid?.policyRegimeState === "reset_policy_uncertain" ? "UNCERTAIN" : "INACTIVE"}</b><small>Evidence confidence {hybrid ? percentage(hybrid.policyRegimeConfidence) : 0}%</small></div>
+          <div className="hero-calibrated-probability" data-testid="hero-calibrated-row"><span>CALIBRATED NEXT-{forecast.horizonHours}H PROBABILITY</span><b data-testid="hero-calibrated-probability">{percentage(forecast.probability)}%</b><small>{percentage(forecast.credibleIntervalLow)}–{percentage(forecast.credibleIntervalHigh)}%</small></div>
         </div>
         <dl className="hero-final-meta" aria-label="Current forecast details">
           <div><dt>Trend</dt><dd className={`trend-${trend.toLowerCase()}`}>{trend}</dd></div>

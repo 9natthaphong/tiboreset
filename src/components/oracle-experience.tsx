@@ -20,6 +20,7 @@ import type { PublicBacktestSummary } from "@/lib/backtest-report";
 import { formatResetEventTimes, formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
 import { PublicVisitCounter } from "./public-visit-counter";
 import type { HybridLikelihood } from "@/lib/hybrid-likelihood";
+import { formatHistoricalMemoryTimestamp, historicalForecastPresentation, historicalOutcomePresentation } from "@/lib/historical-memory";
 
 const Charts = dynamic(() => import("./oracle-charts"), { ssr: false, loading: () => <div className="chart-loading">Loading forecast record…</div> });
 type Analog = { date: string; eventType: string; similarity: number; outcome: string; source: string; followed: boolean | null; forecastBefore?: number };
@@ -342,7 +343,27 @@ function HowForecastIsCalculated({ forecast, evidenceExtractionModel }: { foreca
 }
 
 function HistoricalMemory({ analogs }: { analogs: Analog[] }) {
-  return <section className="archive-section historical-memory"><header className="concise-heading"><div><p className="mono-label cyan-label">HISTORICAL MEMORY</p><h2>Nearest situations.</h2></div><p>Similarity is supporting evidence, never the final forecast.</p></header><div className="memory-grid">{analogs.slice(0, 3).map((analog, index) => <article key={`${analog.date}-${analog.source}`}><span className="memory-index">0{index + 1}</span><strong>{analog.similarity}<small>%</small></strong><div><p>{analog.eventType.replaceAll("_", " ")}</p><time>{analog.date}</time><blockquote>{analog.source}</blockquote><b className={analog.followed === true ? "reset-followed" : "no-reset"}>{analog.followed === null ? "Outcome not scored" : analog.followed ? "Reset followed" : "No reset in horizon"}</b><small>{analog.forecastBefore === undefined ? "Pre-event forecast unavailable" : `Pre-event forecast: ${analog.forecastBefore}%`} · {analog.outcome}</small></div></article>)}</div></section>;
+  return <section className="archive-section historical-memory" data-testid="historical-memory"><header className="concise-heading"><div><p className="mono-label cyan-label">HISTORICAL MEMORY</p><h2>Nearest situations.</h2></div><p>Similarity compares feature patterns with verified historical windows. It is supporting context, not a probability and not part of the final forecast calculation.</p></header><div className="memory-grid">{analogs.slice(0, 3).map((analog, index) => {
+    const outcome = historicalOutcomePresentation(analog.followed, analog.outcome);
+    return <article key={`${analog.date}-${analog.source}`} data-testid="historical-analog">
+      <span className="memory-index">0{index + 1}</span>
+      <div className="memory-similarity" aria-label={`Similarity match ${analog.similarity} out of 100. Not a probability.`}>
+        <span>SIMILARITY MATCH</span>
+        <strong>{analog.similarity}<small>/ 100</small></strong>
+        <em>Not a probability</em>
+      </div>
+      <dl className="memory-meta">
+        <div><dt>Event type</dt><dd>{analog.eventType.replaceAll("_", " ")}</dd></div>
+        <div><dt>Historical timestamp</dt><dd><time dateTime={analog.date}>{formatHistoricalMemoryTimestamp(analog.date)}</time></dd></div>
+      </dl>
+      <div className="memory-excerpt"><span>Source excerpt</span><blockquote>{analog.source}</blockquote></div>
+      <div className={`memory-outcome ${outcome.scored ? "is-scored" : "is-unscored"}`}>
+        <b>{outcome.title}</b>
+        <p>{outcome.explanation}</p>
+      </div>
+      <p className="memory-forecast">{historicalForecastPresentation(analog.forecastBefore)}</p>
+    </article>;
+  })}</div></section>;
 }
 
 function TimeMachine({ history, evidence, modelVersion }: { history: HistoryPoint[]; evidence: Evidence[]; modelVersion: string }) {
