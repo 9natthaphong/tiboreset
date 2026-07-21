@@ -49,7 +49,7 @@ Codex users work within limited usage capacity. Reset timing can determine wheth
 
 ## Product tour
 
-These point-in-time images were captured from the current production deployment on 18 July 2026. Dynamic values may continue to change as the active cycle advances.
+These point-in-time images were captured from the current production deployment on 21 July 2026. Dynamic values may continue to change as the active cycle advances.
 
 ### 1. A completed reset starts the next cycle
 
