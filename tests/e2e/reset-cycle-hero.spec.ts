@@ -53,7 +53,7 @@ test("the resolved event and active-cycle score own non-overlapping hero areas",
     }
     expect(overlaps(titleBox, eventBox), `title/event overlap at ${viewport.width}x${viewport.height}`).toBe(false);
     expect(overlaps(titleBox, scoreBox), `title/score overlap at ${viewport.width}x${viewport.height}`).toBe(false);
-    expect(overlaps(eventBox, scoreBox), `event/score overlap at ${viewport.width}x${viewport.height}`).toBe(false);
+    expect(overlaps(eventBox, scoreBox), `event/score overlap at ${viewport.width}x${viewport.height}: event=${JSON.stringify(eventBox)} score=${JSON.stringify(scoreBox)}`).toBe(false);
     expect(overlaps(scoreBox, ctaBox), `score/CTA overlap at ${viewport.width}x${viewport.height}`).toBe(false);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }

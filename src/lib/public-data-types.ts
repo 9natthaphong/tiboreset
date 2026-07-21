@@ -19,7 +19,9 @@ export type LatestPost = {
   wasAnalyzed: boolean;
   metrics: { likes: number; reposts: number; replies: number };
   signalType?: StructuredSignalType;
-  hybridContributionPoints?: number;
+  timeImmediacy?: "none" | "low" | "moderate" | "high" | "immediate";
+  signalReadiness?: number;
+  watchCounterfactualDeltaPoints?: number | null;
   probabilityCounterfactualDeltaPercentagePoints?: number | null;
   signalBucket?: "forecast_moving" | "screened_out";
   signalReason?: string;
@@ -31,8 +33,8 @@ export type LatestPost = {
   policyRegimeState?: "inactive" | "reset_policy_active" | "reset_policy_uncertain" | "reset_policy_withdrawn";
   policyRegimeActivatedAt?: string | null;
   policyRegimeExpiresAt?: string | null;
-  policyRegimeScoreFloor?: number | null;
-  policyRegimeCap?: number | null;
+  policyRegimeConfidence?: number | null;
+  policyTimingChannel?: number | null;
   policyRegimeDecayFactor?: number | null;
 };
 

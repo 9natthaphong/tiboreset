@@ -17,13 +17,15 @@ GPT-5.6 extracts structured, reviewable evidence through the OpenAI Responses AP
 
 ## Canonical current snapshot
 
-The current public state uses a read-only derivation architecture. `loadCanonicalHybridSnapshot` selects one cutoff from the latest successful forecast calculation, then loads the monitored account, stored posts, latest extractions, verified reset records, milestone records, and the latest persisted forecast reference. One pure builder recalculates Reset Oracle v2 and Sacred Likelihood from that same cutoff-safe record set.
+The current public state uses a read-only derivation architecture. `loadCanonicalHybridSnapshot` selects one cutoff from the latest successful forecast calculation, then loads the monitored account, stored posts, latest extractions, verified reset records, milestone records, and the latest persisted forecast reference. One pure builder recalculates Reset Oracle v2 and Sacred Watch from that same cutoff-safe record set.
 
-The homepage, cinematic hero, forecast views, Latest Signals, `/api/hybrid/current`, the read-only inspector, and Data Lab all consume this canonical snapshot. A completed full or banked reset found in an official stored post is deterministically validated before it can become the newest cycle boundary. It immediately resolves the previous forecast and starts the next ordinary cycle at 30. Transient evidence at or before the boundary is excluded, the completed confirmation contributes zero to the active signal score, and Reset Oracle v2 is recalculated from cutoff-safe evidence. A still-current official `reset_policy_continuation` regime is the sole intentional cross-cycle exception because it describes future policy rather than one completed event.
+The homepage, cinematic hero, forecast views, Latest Signals, `/api/hybrid/current`, the read-only inspector, and Data Lab all consume this canonical snapshot. A completed full or banked reset found in an official stored post is deterministically validated before it can become the newest cycle boundary. It immediately resolves the previous forecast and starts the next cycle at zero maturity. Transient evidence at or before the boundary is excluded, the completed confirmation contributes zero to the active signal channel, and Reset Oracle v2 is recalculated from cutoff-safe evidence. A still-current official `reset_policy_continuation` regime is the sole intentional cross-cycle exception because it describes future policy rather than one completed event.
 
-Hybrid state is not persisted in a separate table for this implementation. `persistedHybridScore: null` therefore means "derived from the canonical stored record set," not zero. If that derivation is unavailable, the Live hybrid state is reported as unavailable rather than reconstructed independently by a page or labeled Live from a stale fallback. Current-state routes use `no-store`; forecast history remains the stored, auditable Reset Oracle timeline.
+Watch state is not persisted in a separate table for this implementation. It is derived from the canonical stored record set rather than copied from a page-local fallback. If derivation is unavailable, the Watch Score is reported as unavailable instead of inventing a Live value. Current-state routes use `no-store`; forecast history remains the stored, auditable Reset Oracle timeline.
 
 The policy regime is also derived from the newest applicable structured extraction, so no schema migration is required. Its states are inactive, active, uncertain, and withdrawn. Compatible posts do not stack: a newer continuation refreshes the regime, while a newer official withdrawal supersedes it. Latest Signals reserves space for the active regime source and latest resolved reset before filling the bounded list with newer screened posts.
+
+Sacred Watch 2.0 uses max-channel evidence fusion. The channels are Reset Oracle v2 timing, policy confidence moderated by normalized cycle maturity and policy age, and the strongest eligible structured live signal. Related posts do not sum. The maximum channel wins, then the strongest bounded negative penalty is applied once. This produces an operational readiness score, not another probability.
 
 ## Runtime boundaries
 
@@ -46,13 +48,11 @@ The branches combine as independent causes. Discretionary cooldown does not supp
 
 ## Data and security
 
-Supabase migrations define monitored accounts, source posts, extractions, verified resets and milestones, model snapshots, contributions, ingestion records, backtests, alert subscriptions, delivery records, and the minimal public visit-day counter. Public access is limited by RLS. The service-role key, X bearer token, OpenAI key, Resend key, webhook secret, cron secret, and admin secret are server-only.
+Supabase migrations define monitored accounts, source posts, extractions, verified resets and milestones, model snapshots, contributions, ingestion records, backtests, and the minimal public visit-day counter. Public access is limited by RLS. The service-role key, X bearer token, OpenAI key, cron secret, and admin secret are server-only.
 
-Social adapters, extraction, forecasting, milestone verification, notification evaluation, and repositories remain independent boundaries. Database uniqueness constraints enforce X post deduplication, notification event idempotency, email delivery idempotency, and one public visit per anonymous browser token per UTC day.
+Social adapters, extraction, forecasting, milestone verification, and repositories remain independent boundaries. Database uniqueness constraints enforce X post deduplication and one public visit per anonymous browser token per UTC day.
 
 The public `/lab/data` route is read-only. `/lab` redirects there. Operational tools live at `/control-room`, which resolves to a 404 unless `CONTROL_ROOM_ENABLED` is exactly `true`. Even when enabled, Live mutations require timing-safe `ADMIN_SECRET` authorization; the browser retains the secret only in component memory.
-
-Resend webhooks read the raw body and verify the Svix ID, timestamp, and signature with the provider SDK before replay-protected delivery state can change. Complaints suppress future delivery. Production email is considered enabled only when the complete server-side configuration is present.
 
 ## Historical inputs and evaluation
 

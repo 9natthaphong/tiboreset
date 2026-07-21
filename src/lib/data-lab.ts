@@ -9,6 +9,7 @@ import { loadCanonicalHybridSnapshot } from "@/lib/canonical-hybrid-snapshot";
 import { MODEL_V2_VERSION } from "@/lib/forecasting/v2";
 import { structuredSignalFromStored } from "@/lib/extraction/structured-signal";
 import type { EventType } from "@/lib/forecasting";
+import { getPublicSnapshot } from "@/lib/public-data";
 
 const backtestSchema = z.object({ cutoff_at: z.string(), horizon_hours: z.number(), predicted_probability: z.coerce.number(), actual_outcome: z.boolean(), brier_loss: z.coerce.number(), model_version: z.string(), evidence_count: z.number() });
 const runSchema = z.object({ id: z.string(), completed_at: z.string().nullable(), status: z.string(), posts_read: z.number().nullable(), posts_inserted: z.number().nullable(), posts_analyzed: z.number().nullable(), metadata: z.record(z.string(), z.unknown()).nullable() });
@@ -38,6 +39,13 @@ export async function getDataLabSnapshot() {
   const seedMilestones = buildMilestoneSeedRows(datasets);
   const seedMilestoneState = deriveMilestoneState(seedMilestones);
   const context = { externalContext: externalContext.events, operationalEvents, milestoneCandidates: seedMilestones, milestoneState: seedMilestoneState };
+  if (process.env.NEXT_PUBLIC_APP_MODE !== "live") {
+    const publicSnapshot = await getPublicSnapshot();
+    const canonicalSnapshot = publicSnapshot.hybridStatus === "available" && publicSnapshot.hybrid
+      ? { status: "available" as const, cutoff: publicSnapshot.canonicalCutoff ?? publicSnapshot.forecast.dataCutoff, forecast: publicSnapshot.forecast, hybrid: publicSnapshot.hybrid, persistedForecast: null, resolvedForecast: null, evidence: publicSnapshot.evidence, signals: [], resetEvents: [] }
+      : null;
+    return { database: "unavailable" as const, seed, modelVersion: MODEL_V2_VERSION, latestForecast: null, canonicalSnapshot, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
+  }
   if (!isServiceSupabaseConfigured()) return { database: "unavailable" as const, seed, modelVersion: MODEL_V2_VERSION, latestForecast: null, canonicalSnapshot: null, counts: null, backtests: [], ingestionRuns: [], extractedEvents: [], ...context };
   try {
     const client = getServiceSupabase();

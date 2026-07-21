@@ -80,14 +80,16 @@ async function main() {
     proposedSignalType: proposed.signal_type,
     proposedContribution: contribution,
     policyRegimeState: projected.hybrid.policyRegimeState,
-    policyContinuationBoost: projected.hybrid.policyContinuationBoost,
-    policyRegimeFloor: projected.hybrid.policyRegimeScoreFloor,
-    policyOnlyCap: projected.hybrid.policyRegimeCap,
+    policyConfidence: projected.hybrid.policyRegimeConfidence,
+    cycleMaturity: projected.hybrid.cycleMaturity,
+    policyDecay: projected.hybrid.policyRegimeDecayFactor,
+    policyTimingChannel: projected.hybrid.policyTimingChannel,
+    winningChannel: projected.hybrid.maxWinningChannel,
     timingOverride: projected.hybrid.appliedOverride,
     calibratedCounterfactualDeltaPercentagePoints: projected.hybrid.policyRegimeCalibratedCounterfactualDeltaPercentagePoints,
-    currentHybridScore: snapshot.hybrid.hybridScore,
-    projectedHybridScore: projected.hybrid.hybridScore,
-    scoreDifference: projected.hybrid.hybridScore - snapshot.hybrid.hybridScore,
+    currentWatchScore: snapshot.hybrid.watchScore,
+    projectedWatchScore: projected.hybrid.watchScore,
+    scoreDifference: projected.hybrid.watchScore - snapshot.hybrid.watchScore,
     currentCalibratedProbability: snapshot.forecast.probability,
     projectedCalibratedProbability: projected.forecast.probability,
     externalXCalls: 0,
@@ -116,7 +118,7 @@ async function main() {
     persisted = true;
   }
   const refreshed = await loadCanonicalHybridSnapshot(client);
-  console.log(JSON.stringify({ persisted, extractionId, reason: persisted ? "corrected_extraction_inserted" : "idempotent_existing_extraction", canonicalSnapshotRefreshed: true, hybridScore: refreshed.hybrid.hybridScore, calibratedProbability: refreshed.forecast.probability, policyRegimeState: refreshed.hybrid.policyRegimeState, policySourcePostId: refreshed.hybrid.policyRegimeSourcePostId }));
+  console.log(JSON.stringify({ persisted, extractionId, reason: persisted ? "corrected_extraction_inserted" : "idempotent_existing_extraction", canonicalSnapshotRefreshed: true, watchScore: refreshed.hybrid.watchScore, winningChannel: refreshed.hybrid.maxWinningChannel, calibratedProbability: refreshed.forecast.probability, policyRegimeState: refreshed.hybrid.policyRegimeState, policySourcePostId: refreshed.hybrid.policyRegimeSourcePostId }));
 }
 
 main().catch((error: unknown) => {

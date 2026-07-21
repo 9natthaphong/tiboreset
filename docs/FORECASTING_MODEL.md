@@ -100,24 +100,61 @@ See the [full v2 report](../artifacts/backtests/2026-06-17_2026-07-17/v2/MODEL_V
 
 These are communication labels, not accuracy claims.
 
-## Live Reset Likelihood state boundary
+## Reset Watch Score
 
-Sacred Likelihood (`sacred-likelihood-1.1.0`) is a separate operational score. In a normal cycle it combines a 30-point baseline with monotonic cycle pressure, a cooldown-gated contribution from Reset Oracle v2, capped and decayed transient signals, negative evidence, and an independently inspectable continuing-policy regime. Normal values remain non-calibrated.
+Sacred Watch (`sacred-watch-2.0.0`) is a separate operational-readiness model. It is not statistically calibrated and never carries a percent sign. Reset Oracle v2 remains the only calibrated next-36-hour probability.
 
-A verified official completed full or banked reset immediately closes the previous forecast cycle. Its timestamp becomes `cycleStartAt`, `hybridState` becomes `new_cycle`, and the ordinary active-cycle baseline starts at exactly 30. The completed confirmation is retained as a resolved event but contributes zero to current `signalPoints`; transient evidence at or before the boundary is excluded.
+Three bounded channels are calculated from the same canonical cutoff:
+
+```text
+timingChannel = Reset Oracle v2 calibrated probability
+
+cycleMaturity = clamp(cyclePoints / 20, 0, 1)
+policyTimingChannel = policyConfidence × cycleMaturity × policyDecay
+
+liveSignalChannel = max(eligible structured-signal readiness)
+
+rawWatch = max(timingChannel, policyTimingChannel, liveSignalChannel)
+adjustedWatch = rawWatch × (1 - boundedNegativePenalty)
+watchScore = round(clamp(adjustedWatch × 100, 0, 94))
+```
+
+A credible near-term commitment is the sole active-cycle override at 95. A completed reset does not become 98 on the Watch Score: it resolves the previous event, becomes the new `cycleStartAt`, and contributes zero to the next cycle. Cycle maturity is exactly zero at that timestamp. Transient evidence at or before the boundary is excluded.
+
+### Cycle maturity
+
+The existing cutoff-safe cycle estimator supplies monotonic points from 0 to 20. It uses a recent/long-term median blend when enough verified intervals exist, then falls back through recent median, long-term median, a single interval, and finally a conservative 168-hour prior. Normalizing those points by 20 preserves the same transparent curve: 0 at reset, 0.25 at one-quarter cycle, 0.50 at one-half cycle, 0.75 at the expected cycle, and 1.00 at twice the expected cycle.
 
 ### Continuing reset-policy regime
 
-A clear monitored-official statement that resets will continue activates `reset_policy_active`. It is high policy relevance but low time immediacy: it is neither confirmation nor a near-term commitment. Full regime strength lasts 72 hours, then decays smoothly to zero at seven days unless refreshed. A newer withdrawal such as “No more resets” supersedes it immediately, and repeated compatible statements never stack.
+A clear monitored-official statement that resets will continue activates `reset_policy_active`. It is high policy relevance but low time immediacy: it is neither confirmation nor a near-term commitment. Full evidence strength lasts 72 hours, then decays smoothly to zero at seven days unless refreshed. A newer withdrawal such as “No more resets” supersedes it immediately, and repeated compatible statements never stack.
 
-The regime uses a max/floor operation rather than adding a flat 30 points:
+Policy state and timing readiness are deliberately separated. The regime carries confidence, source, age, expiry, and decay, but no fixed boost or score floor. Consequently, a 92%-confidence policy statement at cycle maturity 0 contributes 0 to the policy-timing channel; at 50% maturity it contributes 0.46 while fully fresh.
 
-```text
-ordinaryHybrid = 30 + cycle + historical + transient - negative
-policyFloor = 30 + policyContinuationBoost
-scoreBeforeCap = max(ordinaryHybrid, policyFloor)
-```
+### Structured live-signal channel
 
-A fresh, explicit, high-confidence official continuation produces a 30-point boost and a floor of 60. Without credible timing evidence the result is capped at 80. Operational work with timing or a milestone commitment may lift that cap; only a credible near-term commitment produces 95. The 72-hour window, seven-day expiry, 30-point maximum boost, and 80 cap are expert product priors, not learned parameters.
+Each eligible signal receives one bounded readiness value based on semantic type, operational relevance, reset intent, time immediacy, source authority, extraction confidence, and recency. General updates are bounded at 0.15, untimed operator intervention at 0.35, work underway at 0.75, reset hints at 0.80, milestone commitments at 0.92, and credible near-term commitments at 0.95. These bands are expert priors, not learned probabilities. Only the strongest signal in each semantic group survives, and only the strongest surviving live-signal value enters the score.
 
-The calibrated Reset Oracle v2 probability remains a separate result. A continuing-policy statement can enter its normal public-commitment feature path and is measured with a no-write counterfactual, but it never receives a fixed probability addition or override. The resolved 98% confirmation forecast stays in stored audit history, while the active probability is rebuilt from cutoff-safe evidence.
+The strongest eligible negative signal supplies one multiplicative penalty. Negative posts do not stack, and the penalty is not applied separately to every channel. A continuing-policy statement can also enter Reset Oracle v2 through its existing deterministic public-commitment feature path, measured with a no-write counterfactual, but it never receives a fixed probability addition or confirmation override.
+
+### Deterministic scenario table
+
+The table is generated by `npm run watch:scenarios`; values below are fixed test scenarios, not live claims.
+
+| Scenario | Timing | Policy | Signal | Negative | Winner | Watch | Calibrated |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| Just after reset, no policy or signals | 0.03 | 0.00 | 0.00 | 0.00 | Timing | 3 / 100 | 3% |
+| Just after reset, active policy | 0.03 | 0.00 | 0.00 | 0.00 | Timing | 3 / 100 | 3% |
+| Quarter cycle, active policy | 0.12 | 0.23 | 0.00 | 0.00 | Policy timing | 23 / 100 | 12% |
+| Half cycle, active policy | 0.20 | 0.46 | 0.00 | 0.00 | Policy timing | 46 / 100 | 20% |
+| Expected cycle reached, active policy | 0.35 | 0.69 | 0.00 | 0.00 | Policy timing | 69 / 100 | 35% |
+| Operator intervention without timing | 0.08 | 0.00 | 0.17 | 0.00 | Live signal | 17 / 100 | 8% |
+| Operational work underway | 0.18 | 0.00 | 0.63 | 0.00 | Live signal | 63 / 100 | 18% |
+| Reset hint | 0.22 | 0.00 | 0.64 | 0.00 | Live signal | 64 / 100 | 22% |
+| Milestone commitment | 0.32 | 0.00 | 0.78 | 0.00 | Live signal | 78 / 100 | 32% |
+| Near-term reset commitment | 0.40 | 0.00 | 0.84 | 0.00 | Override | 95 / 100 | 40% |
+| Completed reset | 0.03 | 0.00 | 0.00 | 0.00 | Timing | 3 / 100 | 3% |
+| Policy withdrawn | 0.15 | 0.00 | 0.00 | 0.47 | Timing | 8 / 100 | 15% |
+| Strong negative evidence | 0.45 | 0.00 | 0.63 | 0.45 | Live signal | 35 / 100 | 45% |
+
+The scenarios demonstrate the intended epistemic distinction: policy confidence can remain high while readiness is low, and the Watch Score can diverge from the calibrated probability without pretending to be calibrated itself.

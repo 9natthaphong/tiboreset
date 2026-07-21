@@ -60,7 +60,7 @@ export { parseLatestPostsLimit } from "@/lib/latest-posts";
 
 function demoPosts(limit: number): LatestPostsResponse {
   const response = createDemoLatestPosts(state().evidence, currentForecast().dataCutoff, limit);
-  return { ...response, posts: response.posts.map(post => ({ ...post, signalType: post.eventType === "explicit_reset_confirmation" ? "reset_confirmation" : post.eventType === "irrelevant" ? "irrelevant" : "general_update", hybridContributionPoints: 0, probabilityCounterfactualDeltaPercentagePoints: null, signalBucket: post.isRelevant ? "forecast_moving" : "screened_out", signalReason: post.isRelevant ? "Demo evidence fixture." : "Demo post screened as unrelated.", recencyFactor: 1, exclusionReason: post.isRelevant ? null : "irrelevant" })) };
+  return { ...response, posts: response.posts.map(post => ({ ...post, signalType: post.eventType === "explicit_reset_confirmation" ? "reset_confirmation" : post.eventType === "irrelevant" ? "irrelevant" : "general_update", signalReadiness: 0, watchCounterfactualDeltaPoints: null, probabilityCounterfactualDeltaPercentagePoints: null, signalBucket: post.isRelevant ? "forecast_moving" : "screened_out", signalReason: post.isRelevant ? "Demo evidence fixture." : "Demo post screened as unrelated.", recencyFactor: 1, exclusionReason: post.isRelevant ? null : "irrelevant" })) };
 }
 
 function demoHybrid(): HybridLikelihood {
@@ -100,7 +100,9 @@ function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit
         wasAnalyzed: Boolean(event),
         metrics: { likes: asMetric(metrics.like_count), reposts: asMetric(metrics.retweet_count), replies: asMetric(metrics.reply_count) },
         signalType: signal.signal.signalType,
-        hybridContributionPoints: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeEffectivePoints : contribution?.appliedPoints ?? 0,
+        timeImmediacy: signal.signal.timeImmediacy,
+        signalReadiness: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyTimingChannel : contribution?.readinessValue ?? 0,
+        watchCounterfactualDeltaPoints: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeWatchCounterfactualDeltaPoints : contribution?.watchCounterfactualDeltaPoints ?? null,
         probabilityCounterfactualDeltaPercentagePoints: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeCalibratedCounterfactualDeltaPercentagePoints : null,
         signalBucket: contribution?.bucket ?? "screened_out",
         signalReason: contribution?.reason ?? "No active structured signal.",
@@ -112,8 +114,8 @@ function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit
         policyRegimeState: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeState : undefined,
         policyRegimeActivatedAt: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeActivatedAt : null,
         policyRegimeExpiresAt: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeExpiresAt : null,
-        policyRegimeScoreFloor: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeScoreFloor : null,
-        policyRegimeCap: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeCap : null,
+        policyRegimeConfidence: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeConfidence : null,
+        policyTimingChannel: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyTimingChannel : null,
         policyRegimeDecayFactor: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeDecayFactor : null,
       } satisfies LatestPost;
     }),

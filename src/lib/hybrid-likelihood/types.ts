@@ -1,6 +1,7 @@
 import type { Forecast } from "@/lib/forecasting";
 
 export type HybridState = "normal_cycle" | "imminent_commitment" | "new_cycle";
+export type WatchWinningChannel = "timing" | "policy_timing" | "live_signal" | "none" | "near_term_commitment";
 export type StructuredSignalType =
   | "irrelevant"
   | "general_update"
@@ -61,10 +62,12 @@ export type SignalContribution = {
   signalType: StructuredSignalType;
   semanticGroup: string;
   direction: "raised" | "lowered" | "confirmed" | "contextual";
-  rawPoints: number;
+  semanticCeiling: number;
   confidenceFactor: number;
   recencyFactor: number;
-  appliedPoints: number;
+  readinessValue: number;
+  negativePenalty: number;
+  watchCounterfactualDeltaPoints: number | null;
   bucket: "forecast_moving" | "screened_out";
   exclusionReason: "before_cycle_start" | "expired" | "requires_review" | "irrelevant" | "superseded_in_group" | "previous_cycle_resolved" | null;
   reason: string;
@@ -82,20 +85,23 @@ export type CycleEstimate = {
 };
 
 export type HybridLikelihood = CycleEstimate & {
-  hybridModelVersion: "sacred-likelihood-1.1.0";
-  hybridScore: number;
+  watchModelVersion: "sacred-watch-2.0.0";
+  watchScore: number;
   hybridState: HybridState;
   cyclePoints: number;
-  historicalPoints: number;
-  signalPoints: number;
-  negativePoints: number;
+  cycleMaturity: number;
+  timingChannel: number;
+  policyTimingChannel: number;
+  strongestSignalChannel: number;
+  negativePenalty: number;
+  maxWinningChannel: WatchWinningChannel;
+  whyThisScore: string;
   appliedOverride: "near_term_reset_commitment" | null;
   calculatedAt: string;
   evidenceCutoff: string;
   calibratedProbability: number;
   credibleInterval: [number, number];
   calibratedModelVersion: string;
-  persistedHybridScore: null;
   confirmation: HybridResetEvent | null;
   previousCycleResolvedAt: string | null;
   previousCycleFinalProbability: number | null;
@@ -108,12 +114,9 @@ export type HybridLikelihood = CycleEstimate & {
   policyRegimeExpiresAt: string | null;
   policyRegimeConfidence: number;
   policyRegimeReason: string;
-  policyRegimeScoreFloor: number;
-  policyRegimeCap: number;
-  policyContinuationBoost: number;
-  policyRegimeEffectivePoints: number;
   policyRegimeAgeHours: number | null;
   policyRegimeDecayFactor: number;
+  policyRegimeWatchCounterfactualDeltaPoints: number | null;
   policyRegimeCalibratedCounterfactualDeltaPercentagePoints: number | null;
 };
 

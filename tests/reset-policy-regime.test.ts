@@ -9,8 +9,9 @@ import { selectCanonicalLatestSignals } from "@/lib/latest-signals-selection";
 
 const resetAt = "2026-07-18T03:28:22Z";
 const context: ForecastContext = { verifiedResets: [], milestoneObservations: [], historicalWindows: [], operationalSignals: [], nextPledgedMilestoneUsers: null };
-const forecast = { ...forecastFromEvidence([], resetAt, 36, 80, 17), probability: .43, credibleIntervalLow: .11, credibleIntervalHigh: .84 };
+const forecast = { ...forecastFromEvidence([], resetAt, 36, 80, 17), probability: .04, credibleIntervalLow: .01, credibleIntervalHigh: .12 };
 const reset: HybridResetEvent = { id: "reset", occurredAt: resetAt, resetType: "full", verified: true, sourcePostId: "reset-post", sourceRecordId: "reset-row" };
+const previousReset: HybridResetEvent = { id: "previous-reset", occurredAt: "2026-07-17T03:28:22Z", resetType: "full", verified: true, sourcePostId: "previous-reset-post", sourceRecordId: "previous-reset-row" };
 const structured = (overrides: Partial<StructuredSignal> = {}): StructuredSignal => ({ signalType: "general_update", operationalRelevance: "moderate", resetIntentStrength: 0, operatorInterventionStrength: 0, timeImmediacy: "low", sourceAuthority: "monitored_official", extractionConfidence: .9, requiresReview: false, uncertainties: [], resetConfirmed: false, resetType: "none", policyScope: "none", policyPersistence: "none", ...overrides });
 const signal = (postId: string, postedAt: string, overrides: Partial<StructuredSignal>): HybridSignalInput => ({ id: `event-${postId}`, postId, text: postId, postedAt, sourceUrl: `https://x.com/i/status/${postId}`, signal: structured(overrides), verificationStatus: overrides.requiresReview ? "needs_review" : "structured" });
 const policySignal = (postId = "policy", postedAt = "2026-07-18T02:00:00Z") => signal(postId, postedAt, { signalType: "reset_policy_continuation", operationalRelevance: "high", resetIntentStrength: .9, timeImmediacy: "low", extractionConfidence: .92, policyScope: "ongoing", policyPersistence: "active" });
@@ -41,18 +42,19 @@ describe("reset policy language screening", () => {
 });
 
 describe("long-lived reset policy regime", () => {
-  it("activates a fresh official regime near a 60 floor and survives a reset boundary", () => {
+  it("keeps high policy confidence separate from near-zero cycle maturity", () => {
     const result = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [policySignal()], now: resetAt });
-    expect(result).toMatchObject({ hybridModelVersion: "sacred-likelihood-1.1.0", hybridState: "new_cycle", policyRegimeState: "reset_policy_active", policyRegimeSourcePostId: "policy", policyContinuationBoost: 30, policyRegimeScoreFloor: 60, policyRegimeCap: 80, signalPoints: 0 });
-    expect(result.hybridScore).toBe(60);
-    expect(result.activeSignals.find(item => item.postId === "policy")).toMatchObject({ bucket: "forecast_moving", appliedPoints: 0 });
+    expect(result).toMatchObject({ watchModelVersion: "sacred-watch-2.0.0", hybridState: "new_cycle", policyRegimeState: "reset_policy_active", policyRegimeSourcePostId: "policy", policyRegimeConfidence: .92, cycleMaturity: 0, policyTimingChannel: 0, strongestSignalChannel: 0 });
+    expect(result.watchScore).toBe(4);
+    expect(result.watchScore).toBeLessThan(60);
+    expect(result.activeSignals.find(item => item.postId === "policy")).toMatchObject({ bucket: "forecast_moving", readinessValue: 0 });
   });
 
   it("does not let ordinary transient evidence survive the reset boundary", () => {
     const transient = signal("hint", "2026-07-18T02:30:00Z", { signalType: "reset_hint", operationalRelevance: "high", resetIntentStrength: .7, extractionConfidence: .9 });
     const result = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [policySignal(), transient], now: resetAt });
-    expect(result.excludedSignals.find(item => item.postId === "hint")).toMatchObject({ exclusionReason: "before_cycle_start", appliedPoints: 0 });
-    expect(result.hybridScore).toBe(60);
+    expect(result.excludedSignals.find(item => item.postId === "hint")).toMatchObject({ exclusionReason: "before_cycle_start", readinessValue: 0 });
+    expect(result.watchScore).toBe(4);
   });
 
   it("does not stack repeated policy statements and lets a newer statement refresh or withdraw the regime", () => {
@@ -60,7 +62,7 @@ describe("long-lived reset policy regime", () => {
     const newer = policySignal("newer", "2026-07-18T02:30:00Z");
     expect(derivePolicyRegime([older, newer], resetAt).sourcePostId).toBe("newer");
     const withdrawal = signal("withdrawal", "2026-07-18T03:00:00Z", { signalType: "negative_or_delaying_signal", operationalRelevance: "high", resetIntentStrength: 1, policyScope: "ongoing", policyPersistence: "withdrawn" });
-    expect(derivePolicyRegime([older, newer, withdrawal], resetAt)).toMatchObject({ state: "reset_policy_withdrawn", sourcePostId: "withdrawal", boost: 0 });
+    expect(derivePolicyRegime([older, newer, withdrawal], resetAt)).toMatchObject({ state: "reset_policy_withdrawn", sourcePostId: "withdrawal", confidence: .9 });
   });
 
   it("moves superseded continuation statements out of the active signal set", () => {
@@ -68,7 +70,7 @@ describe("long-lived reset policy regime", () => {
     const newer = policySignal("newer", "2026-07-18T02:30:00Z");
     const result = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [older, newer], now: resetAt });
     expect(result.activeSignals.find(item => item.postId === "newer")).toBeDefined();
-    expect(result.excludedSignals.find(item => item.postId === "older")).toMatchObject({ exclusionReason: "superseded_in_group", appliedPoints: 0 });
+    expect(result.excludedSignals.find(item => item.postId === "older")).toMatchObject({ exclusionReason: "superseded_in_group", readinessValue: 0 });
   });
 
   it("holds full strength for 72 hours, then decays and expires after seven days", () => {
@@ -76,21 +78,38 @@ describe("long-lived reset policy regime", () => {
     expect(policyRegimeDecayFactor(96)).toBeLessThan(1);
     expect(policyRegimeDecayFactor(96)).toBeGreaterThan(0);
     expect(policyRegimeDecayFactor(168)).toBe(0);
+    const expired = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [policySignal()], now: "2026-07-25T03:28:22Z" });
+    expect(expired.policyRegimeState).toBe("inactive");
+    expect(expired.excludedSignals.find(item => item.postId === "policy")).toMatchObject({ bucket: "screened_out", exclusionReason: "expired", readinessValue: 0 });
   });
 
-  it("uses a floor instead of adding 30 and enforces the policy-only cap", () => {
+  it("uses max-channel fusion without adding or flooring policy evidence", () => {
     const highForecast = { ...forecast, probability: .95 };
-    const result = calculateHybridLikelihood({ forecast: highForecast, resetEvents: [], signals: [policySignal()], now: "2026-07-18T04:00:00Z" });
-    expect(result.hybridScore).toBeLessThanOrEqual(80);
-    expect(result.policyRegimeEffectivePoints).toBeLessThan(30);
+    const result = calculateHybridLikelihood({ forecast: highForecast, resetEvents: [previousReset, reset], signals: [policySignal()], now: "2026-07-19T03:28:22Z" });
+    expect(result.policyTimingChannel).toBeCloseTo(.69, 6);
+    expect(result.timingChannel).toBe(.95);
+    expect(result.maxWinningChannel).toBe("timing");
+    expect(result.watchScore).toBe(94);
   });
 
-  it("allows a credible near-term commitment to produce 95 but continuation alone never does", () => {
-    const continuation = calculateHybridLikelihood({ forecast, resetEvents: [], signals: [policySignal()], now: "2026-07-18T04:00:00Z" });
+  it("increases policy timing as the cutoff-safe cycle matures", () => {
+    const atStart = calculateHybridLikelihood({ forecast, resetEvents: [previousReset, reset], signals: [policySignal()], now: resetAt });
+    const atQuarter = calculateHybridLikelihood({ forecast, resetEvents: [previousReset, reset], signals: [policySignal()], now: "2026-07-18T09:28:22Z" });
+    const atHalf = calculateHybridLikelihood({ forecast, resetEvents: [previousReset, reset], signals: [policySignal()], now: "2026-07-18T15:28:22Z" });
+    const atExpected = calculateHybridLikelihood({ forecast, resetEvents: [previousReset, reset], signals: [policySignal()], now: "2026-07-19T03:28:22Z" });
+    expect([atStart.cycleMaturity, atQuarter.cycleMaturity, atHalf.cycleMaturity, atExpected.cycleMaturity]).toEqual([0, .25, .5, .75]);
+    expect(atStart.policyTimingChannel).toBe(0);
+    expect(atQuarter.policyTimingChannel).toBeCloseTo(.23, 6);
+    expect(atHalf.policyTimingChannel).toBeCloseTo(.46, 6);
+    expect(atExpected.policyTimingChannel).toBeCloseTo(.69, 6);
+  });
+
+  it("allows a credible near-term commitment to produce 95 without turning policy continuation into an override", () => {
+    const continuation = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [policySignal()], now: "2026-07-18T04:00:00Z" });
     const commitment = signal("commitment", "2026-07-18T03:30:00Z", { signalType: "near_term_reset_commitment", operationalRelevance: "high", resetIntentStrength: .9, timeImmediacy: "high", extractionConfidence: .9 });
-    const imminent = calculateHybridLikelihood({ forecast, resetEvents: [], signals: [policySignal(), commitment], now: "2026-07-18T04:00:00Z" });
-    expect(continuation.hybridScore).toBeLessThanOrEqual(80);
-    expect(imminent.hybridScore).toBe(95);
+    const imminent = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [policySignal(), commitment], now: "2026-07-18T04:00:00Z" });
+    expect(continuation.watchScore).toBeLessThan(60);
+    expect(imminent.watchScore).toBe(95);
   });
 
   it("maps policy evidence through the calibrated model without a fixed 30-point probability addition", () => {
@@ -104,7 +123,7 @@ describe("long-lived reset policy regime", () => {
   it("keeps visitor counts out of both metrics", () => {
     const baseline = calculateHybridLikelihood({ forecast, resetEvents: [], signals: [policySignal()], now: resetAt });
     const visited = calculateHybridLikelihood({ forecast, resetEvents: [], signals: [policySignal()], now: resetAt, visitorCount: 10_000_000 });
-    expect(visited.hybridScore).toBe(baseline.hybridScore);
+    expect(visited.watchScore).toBe(baseline.watchScore);
     expect(visited.calibratedProbability).toBe(baseline.calibratedProbability);
   });
 });

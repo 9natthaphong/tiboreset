@@ -7,7 +7,7 @@ export const EXTRACTION_VERSION = "reset-extraction-1.3.0";
 
 const systemPrompt = `You extract structured evidence from one public social post for RESET ORACLE.
 Analyze only the monitored official post supplied below. Do not invent missing parent, thread, image, or quoted-post context.
-Never estimate or output a forecast probability or hybrid likelihood score.
+Never estimate or output a forecast probability, Reset Watch Score, or readiness channel.
 Treat playful language as uncertain unless there is a clear commitment.
 A question or poll is not a confirmed reset.
 Distinguish historical statements from future intent.
@@ -20,7 +20,7 @@ A clear official statement such as "The resets will continue" is reset_policy_co
 "Will the resets continue?" is a question requiring review and zero automatic impact. "No more resets" is negative_or_delaying_signal with withdrawn policy persistence.
 A willingness to investigate is not a reset promise. A reset hint is not a reset confirmation.
 A question, joke, metaphor, conditional statement, or vague "soon" wording is not a commitment.
-Never output a Live Reset Likelihood, calibrated probability, or fixed score addition.
+Never output a Reset Watch Score, calibrated probability, channel value, or fixed score addition.
 Use only minimal verbatim evidence excerpts and mark ambiguous posts for review.`;
 
 export async function extractWithOpenAI(text: string, client?: OpenAI): Promise<Extraction> {

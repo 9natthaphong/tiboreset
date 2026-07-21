@@ -5,13 +5,13 @@
 | Field | Submission copy |
 | --- | --- |
 | Project | Sacred Forecast / TiboReset |
-| Engines | Sacred Likelihood + Reset Oracle v2 |
+| Engines | Sacred Watch 2.0 + Reset Oracle v2 |
 | Tagline | Forecast the reset. Plan the next 36 hours of coding. |
 | Repository | <https://github.com/9natthaphong/tiboreset> |
 | Live app | <https://tiboreset.vercel.app> |
 | Public Data Lab | <https://tiboreset.vercel.app/lab/data> |
 
-Sacred Forecast is an unofficial two-layer reset-risk product. Live Reset Likelihood is a cycle-aware operational score; Reset Oracle v2 remains the calibrated probability of an official reset announcement inside the next rolling 36 hours.
+Sacred Forecast is an unofficial two-layer reset-risk product. The Reset Watch Score is a non-probabilistic operational-readiness score; Reset Oracle v2 remains the calibrated probability of an official reset announcement inside the next rolling 36 hours. A separate Reset Policy state reports whether current official evidence supports continuing resets without implying timing.
 
 ## Inspiration
 
@@ -23,10 +23,10 @@ Codex users have limited capacity, and reset timing can change whether a develop
 - Screens obvious irrelevant posts locally before any model call.
 - Uses GPT-5.6 through the OpenAI Responses API to extract strict, reviewable evidence from candidate posts.
 - Blocks jokes, questions, metaphors, uncertain statements, and review-gated evidence from changing either metric automatically.
-- Calculates a primary 30–98 Live Reset Likelihood from cycle timing, verified history, Reset Oracle v2, and structured current signals. This operational score is not calibrated.
-- Preserves a clear official continuing-reset policy across cycle boundaries for up to seven days, while capping policy-only likelihood because the statement supplies no timing.
+- Calculates a primary Reset Watch Score from the maximum of calibrated timing, policy-timing, and strongest live-signal readiness, then applies negative evidence once. The score is not a probability.
+- Preserves a clear official continuing-reset policy across cycle boundaries for up to seven days while moderating it by cycle maturity and age; there is no fixed policy floor.
 - Preserves Reset Oracle v2 as a separate calibrated 36-hour probability with a credible interval and 5,000 deterministic seeded simulations.
-- Resolves the previous cycle when a completed reset is verified, preserves the event for audit, and starts the next cycle immediately from a 30 baseline.
+- Resolves the previous cycle when a completed reset is verified, preserves the event for audit, and starts the next cycle immediately at zero cycle maturity.
 - Exposes Forecast-moving and Screened out evidence, model provenance, resolved-event history, and active-cycle state through a public read-only Data Lab.
 
 ## How we built it
@@ -36,13 +36,13 @@ The product uses Next.js App Router and strict TypeScript. Supabase Postgres sto
 Candidate posts go to the OpenAI Responses API with a strict Zod-backed schema. GPT-5.6 returns evidence fields, never a final score. Deterministic TypeScript then calculates two distinct outputs:
 
 1. **Reset Oracle v2 calibrated probability:** a policy branch estimates pledged-milestone arrival and reset-given-milestone risk; a discretionary branch applies six-hour logistic hazards to current evidence. Five thousand seeded simulations produce the rolling 36-hour probability interval.
-2. **Live Reset Likelihood:** a separately versioned hybrid engine combines cycle pressure, verified history, the Reset Oracle result, and decayed structured signals into a bounded operational score.
+2. **Reset Watch Score:** a separately versioned engine uses max-channel fusion so calibrated timing, policy-timing, and correlated live signals are not added together.
 
 A canonical snapshot keeps the homepage, charts, public API, Latest Signals, and Data Lab synchronized. A completed reset closes one cycle, records the resolved outcome, excludes pre-reset evidence, and begins the active next-reset forecast.
 
 ## The role of OpenAI
 
-GPT-5.6 interprets candidate public-post text and returns strict fields such as signal type, reset type, confidence, evidence excerpts, uncertainties, and review status. It does not calculate Live Reset Likelihood or Reset Oracle v2's calibrated probability. Obvious irrelevant posts are screened before a model call, and deterministic safety rules keep ambiguous evidence from moving the forecast automatically.
+GPT-5.6 interprets candidate public-post text and returns strict fields such as signal type, reset type, confidence, evidence excerpts, uncertainties, and review status. It does not calculate the Reset Watch Score or Reset Oracle v2's calibrated probability. Obvious irrelevant posts are screened before a model call, and deterministic safety rules keep ambiguous evidence from moving the forecast automatically.
 
 ## How Codex helped
 
@@ -66,9 +66,20 @@ Codex was used across the engineering lifecycle: repository implementation, data
 - A public Data Lab, canonical audit snapshot, protected operational surface, and privacy-safe public visit counter.
 - A cached, six-hour walk-forward backtest with target-announcement exclusion in strict pre-announcement evaluation.
 
+## Internal judge assessment
+
+| Criterion | Evidence a judge can inspect |
+| --- | --- |
+| Technological Implementation | The OpenAI stage stops at structured evidence; deterministic TypeScript owns both outputs. Max-channel fusion prevents correlated evidence from being counted twice, and one canonical snapshot feeds every public consumer. |
+| Design | Policy status, operational readiness, and calibrated probability are visually and semantically separate instead of being compressed into one impressive-looking number. |
+| Potential Impact | The output maps fragmented reset evidence to a practical quota-planning decision: run work now, protect capacity, or keep heavy runs queued. |
+| Quality of the Idea | The Data Lab exposes the winning channel, policy confidence, cycle maturity, decay, uncertainty, and audit cutoff, making disagreement inspectable rather than hidden behind model branding. |
+
+This assessment is about product and implementation quality, not an accuracy claim. The four-event Reset Oracle evaluation remains **Promising but unvalidated**, and the Watch Score has not been calibrated or added to the Brier comparison.
+
 ## Backtest result
 
-The historical comparison applies to Reset Oracle v2, not Live Reset Likelihood.
+The historical comparison applies to Reset Oracle v2, not the Reset Watch Score.
 
 | Measure | Strict pre-announcement result |
 | --- | ---: |
@@ -91,7 +102,7 @@ Observed lead time was 19.6 hours above 30% before the 8M announcement. Before t
 ## Three-minute judge walkthrough
 
 1. **0:00–0:25 — Reset Released.** Show the latest completed event, its official timestamp and source, then explain that the previous forecast is resolved and a new cycle begins immediately.
-2. **0:25–0:45 — Live Reset Likelihood.** Explain that the primary cycle-aware score answers how elevated the overall reset situation appears now; it is not a calibrated probability.
+2. **0:25–0:45 — Three distinct answers.** Show Reset Policy status, the Reset Watch Score `/ 100`, and Reset Oracle v2's calibrated next-36-hour probability. Explain that confidence in continuing policy is not the same as near-term readiness.
 3. **0:45–1:05 — Reset Oracle v2.** Point to the separate calibrated 36-hour probability, credible interval, cutoff, seed, and evidence provenance.
 4. **1:05–1:25 — Evidence states.** Switch between Forecast-moving and Screened out to show active, excluded, expired, and previous-cycle evidence.
 5. **1:25–1:45 — Resolved trend.** Show the calibrated trend's 98% resolved-event marker and the visually separated active next cycle.
@@ -107,11 +118,11 @@ Use the following current-production images from [`docs/readme/`](readme/). The 
 
 1. `01-current-forecast.jpg`
 
-   A confirmed reset closes the previous forecast and immediately starts a new operational cycle at a 30% baseline.
+   The hero separates the resolved reset, active reset policy, Reset Watch Score, and calibrated next-36-hour probability.
 
 2. `02-policy-model.jpg`
 
-   Two separate metrics: a cycle-aware Live Reset Likelihood and Reset Oracle v2s calibrated 36-hour probability.
+   Max-channel diagnostics expose calibrated timing, policy-timing, strongest live-signal readiness, and the bounded negative penalty without double counting.
 
 3. `03-latest-signals.jpg`
 
@@ -123,7 +134,7 @@ Use the following current-production images from [`docs/readme/`](readme/). The 
 
 5. `05-data-lab.jpg`
 
-   The Public Data Lab separates the resolved reset, active cycle, model inputs, exclusions, and audit records.
+   The Public Data Lab exposes the resolved event, active-cycle Watch decomposition, policy regime, calibrated forecast, exclusions, and audit cutoff.
 
 - Preferred thumbnail ratio: **3:2**
 - Maximum Devpost file size: **5 MB**

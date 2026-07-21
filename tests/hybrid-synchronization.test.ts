@@ -24,39 +24,41 @@ describe("hybrid reset-state synchronization", () => {
     expect(hasExplicitCompletedOperationalReset("Will you reset the limits?")).toBe(false);
   });
 
-  it("closes the old cycle immediately and starts the active cycle at exactly 30", () => {
+  it("closes the old cycle immediately without carrying confirmation into the watch score", () => {
     const result = calculateHybridLikelihood({ forecast: baseForecast, resetEvents: [reset()], signals: [confirmationSignal], now: confirmationAt, resolvedForecastProbability: .98 });
-    expect(result).toMatchObject({ hybridState: "new_cycle", hybridScore: 30, cycleStartAt: confirmationAt, cyclePoints: 0, historicalPoints: 0, signalPoints: 0, appliedOverride: null, eventResolutionStatus: "resolved", previousCycleFinalProbability: .98 });
-    expect(result.activeSignals[0]).toMatchObject({ direction: "confirmed", appliedPoints: 0, exclusionReason: "previous_cycle_resolved" });
+    expect(result).toMatchObject({ hybridState: "new_cycle", watchScore: 47, cycleStartAt: confirmationAt, cyclePoints: 0, cycleMaturity: 0, timingChannel: .47, policyTimingChannel: 0, strongestSignalChannel: 0, appliedOverride: null, eventResolutionStatus: "resolved", previousCycleFinalProbability: .98 });
+    expect(result.activeSignals[0]).toMatchObject({ direction: "confirmed", readinessValue: 0, exclusionReason: "previous_cycle_resolved" });
   });
 
   it("has no confirmation hold and keeps the newest verified reset as the cycle start", () => {
     const result = calculateHybridLikelihood({ forecast: baseForecast, resetEvents: [reset("2026-07-16T04:14:09.822Z", "9m"), reset()], signals: [confirmationSignal], now: "2026-07-18T03:40:00Z", resolvedForecastProbability: .98 });
     expect(result.hybridState).toBe("new_cycle");
-    expect(result.hybridScore).toBe(30);
+    expect(result.watchScore).toBe(47);
     expect(result.cycleStartAt).toBe(confirmationAt);
     expect(result.elapsedCycleHours).toBeCloseTo(11.633 / 60, 2);
   });
 
-  it("keeps the first incomplete point of post-reset pressure at the 30 baseline", () => {
+  it("does not add a default baseline to an early post-reset watch score", () => {
     const result = calculateHybridLikelihood({ forecast: baseForecast, resetEvents: [reset()], signals: [confirmationSignal], now: "2026-07-18T05:03:09.544Z", resolvedForecastProbability: .98 });
-    expect(result.cyclePoints + result.historicalPoints).toBeGreaterThan(0);
-    expect(result.cyclePoints + result.historicalPoints).toBeLessThan(1);
-    expect(result.hybridScore).toBe(30);
+    expect(result.cyclePoints).toBeGreaterThan(0);
+    expect(result.cycleMaturity).toBeLessThan(.05);
+    expect(result.watchScore).toBe(47);
+    expect(result.maxWinningChannel).toBe("timing");
   });
 
   it("excludes old-cycle operator intervention from the active score", () => {
     const intervention = signal("2078249667314528706", "2026-07-18T01:10:00Z", { signalType: "operator_intervention", operatorInterventionStrength: .62, resetIntentStrength: .15, extractionConfidence: .66 });
     const result = calculateHybridLikelihood({ forecast: baseForecast, resetEvents: [reset()], signals: [confirmationSignal, intervention], now: "2026-07-18T03:40:00Z", resolvedForecastProbability: .98 });
-    expect(result.hybridScore).toBe(30);
-    expect(result.excludedSignals.find(item => item.postId === intervention.postId)).toMatchObject({ bucket: "screened_out", exclusionReason: "before_cycle_start", appliedPoints: 0 });
+    expect(result.watchScore).toBe(47);
+    expect(result.excludedSignals.find(item => item.postId === intervention.postId)).toMatchObject({ bucket: "screened_out", exclusionReason: "before_cycle_start", readinessValue: 0 });
   });
 
   it("recalculates the calibrated forecast from post-reset evidence instead of inheriting resolved 98", () => {
     const resolved = { id: "resolved-forecast", generatedAt: "2026-07-18T03:30:00Z", modelVersion: "reset-oracle-2.0.0", probability: .98, credibleIntervalLow: .98, credibleIntervalHigh: .98, evidencePostIds: ["2078320950488297917-source-row"] };
     const result = buildCanonicalHybridSnapshot({ cutoff: confirmationAt, evidence: [confirmationEvidence], signals: [confirmationSignal], resetEvents: [reset()], context, persistedForecast: resolved, persistedForecasts: [resolved], simulations: 80, seed: 17 });
-    expect(result.hybrid).toMatchObject({ hybridState: "new_cycle", hybridScore: 30, cyclePoints: 0, historicalPoints: 0, signalPoints: 0, previousCycleFinalProbability: .98 });
+    expect(result.hybrid).toMatchObject({ hybridState: "new_cycle", cyclePoints: 0, cycleMaturity: 0, policyTimingChannel: 0, strongestSignalChannel: 0, previousCycleFinalProbability: .98 });
     expect(result.forecast.probability).toBeLessThan(.98);
+    expect(result.hybrid.watchScore).toBe(Math.round(result.forecast.probability * 100));
     expect(result.resolvedForecast?.probability).toBe(.98);
     expect(result.evidence).toHaveLength(0);
   });
@@ -68,7 +70,16 @@ describe("hybrid reset-state synchronization", () => {
     expect(result.persistedForecast?.probability).toBe(.47);
     expect(result.resolvedForecast?.probability).toBe(.98);
     expect(result.forecast.probability).toBeLessThan(.98);
-    expect(result.hybrid.hybridScore).toBe(30);
+    expect(result.hybrid.watchScore).toBe(Math.round(result.forecast.probability * 100));
+  });
+
+  it("selects the resolved 98 snapshot instead of a newer next-cycle forecast that references the same source", () => {
+    const resolved = { id: "resolved", generatedAt: "2026-07-18T03:30:00Z", modelVersion: "reset-oracle-2.0.0", probability: .98, credibleIntervalLow: .98, credibleIntervalHigh: .98, evidencePostIds: ["2078320950488297917-source-row"] };
+    const nextCycle = { id: "next-cycle", generatedAt: "2026-07-21T10:00:00Z", modelVersion: "reset-oracle-2.0.0", probability: .03, credibleIntervalLow: .01, credibleIntervalHigh: .2, evidencePostIds: ["2078320950488297917-source-row"] };
+    const result = buildCanonicalHybridSnapshot({ cutoff: "2026-07-21T10:00:00Z", evidence: [confirmationEvidence], signals: [confirmationSignal], resetEvents: [reset()], context, persistedForecast: nextCycle, persistedForecasts: [nextCycle, resolved], simulations: 80, seed: 17 });
+    expect(result.persistedForecast?.probability).toBe(.03);
+    expect(result.resolvedForecast?.probability).toBe(.98);
+    expect(result.hybrid.previousCycleFinalProbability).toBe(.98);
   });
 
   it("formats the stored timestamp deterministically in UTC and Thailand time", () => {
@@ -81,7 +92,8 @@ describe("hybrid reset-state synchronization", () => {
     expect(points.at(-1)).toBe(20);
     const baseline = calculateHybridLikelihood({ forecast: baseForecast, resetEvents: [], signals: [], now: "2026-07-18T03:40:00Z" });
     const withVisits = calculateHybridLikelihood({ forecast: baseForecast, resetEvents: [], signals: [], now: "2026-07-18T03:40:00Z", visitorCount: 99_999_999 });
-    expect(withVisits.hybridScore).toBe(baseline.hybridScore);
+    expect(withVisits.watchScore).toBe(baseline.watchScore);
+    expect(withVisits.calibratedProbability).toBe(baseline.calibratedProbability);
   });
 
   it("classifies the stored-text pattern canonically as operator intervention", () => {

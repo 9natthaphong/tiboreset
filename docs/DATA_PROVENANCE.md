@@ -10,9 +10,9 @@ Candidate posts pass through a deterministic relevance screen before OpenAI. Str
 
 For the current public snapshot, a stored extraction is not trusted as a completed reset solely because of its label. The canonical builder also requires the monitored official account, full or banked reset type, no review flag, confirmation-safe confidence, and deterministic completed operational language in the stored post text. Derived confirmation state records its source post, extraction version, verification method, and whether the source is synchronized into `known_reset_events` or `milestone_events`.
 
-The current hybrid score is derived read-only from the same cutoff, calibrated forecast context, reset history, and evidence used by the public API and Data Lab. It is not a page-local estimate and is not written into the calibrated forecast row. The latest persisted forecast ID and probability remain attached as an audit reference. Failure to build the canonical Live snapshot produces an unavailable state rather than a fabricated hybrid value.
+The current Reset Watch Score is derived read-only from the same cutoff, calibrated forecast context, reset history, and evidence used by the public API and Data Lab. It is not a page-local estimate and is not written into the calibrated forecast row. The latest persisted forecast ID and probability remain attached as an audit reference. Failure to build the canonical snapshot produces an unavailable state rather than a fabricated Watch Score.
 
-Long-lived reset-policy state is derived from the newest applicable stored structured extraction. The record exposes its source post, activation and expiry timestamps, confidence, reason, score floor, cap, decay factor, and calibrated counterfactual delta. The prior extraction remains in `extracted_events` when a post is safely reprocessed; no historical row is overwritten.
+Long-lived reset-policy state is derived from the newest applicable stored structured extraction. The record exposes its source post, activation and expiry timestamps, confidence, reason, age-based decay, policy-timing channel, and calibrated counterfactual delta. The prior extraction remains in `extracted_events` when a post is safely reprocessed; no historical row is overwritten.
 
 ## Human-reviewed historical records
 
@@ -44,4 +44,4 @@ At each cutoff, the evaluator sees only posts, evidence, milestones, interval le
 
 ## Demo data
 
-Demo fixtures are version-controlled and synthetic. The UI labels them Demo Data, Demo Posts, or Demo Email. They must not be presented as historical facts.
+Demo fixtures are version-controlled and synthetic. The UI labels them Demo Data or Demo Posts. They must not be presented as historical facts.

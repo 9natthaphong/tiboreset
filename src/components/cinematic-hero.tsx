@@ -339,10 +339,11 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
           {hybrid.confirmation.sourceUrl && <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">Official source <ExternalLink size={13}/></a>}
         </aside>}
         <div className="hero-story-probability">
-          <span>{resetReleased ? "NEW RESET CYCLE" : "LIVE RESET LIKELIHOOD"}</span>
-          <strong data-testid="hero-probability">{hybridStatus === "available" && hybrid ? hybrid.hybridScore : "—"}{hybridStatus === "available" && <small>%</small>}</strong>
-          <p><b>Live Reset Likelihood</b><small>{resetReleased ? "New-cycle operational score · not a calibrated probability" : "Hybrid operational score · not a calibrated probability"}</small></p>
-          <div className="hero-calibrated-probability"><span>CALIBRATED {forecast.horizonHours}-HOUR PROBABILITY</span><b>{percentage(forecast.probability)}%</b><small>{percentage(forecast.credibleIntervalLow)}–{percentage(forecast.credibleIntervalHigh)}%</small></div>
+          <span>RESET WATCH SCORE</span>
+          <strong data-testid="hero-watch-score">{hybridStatus === "available" && hybrid ? hybrid.watchScore : "—"}{hybridStatus === "available" && <small>/ 100</small>}</strong>
+          <p><b>{resetReleased ? "New reset cycle" : "Current readiness"}</b><small>An operational readiness score, not a probability.</small></p>
+          <div className="hero-policy-state"><span>RESET POLICY</span><b>{hybrid?.policyRegimeState === "reset_policy_active" ? "ACTIVE" : hybrid?.policyRegimeState === "reset_policy_withdrawn" ? "WITHDRAWN" : hybrid?.policyRegimeState === "reset_policy_uncertain" ? "UNCERTAIN" : "INACTIVE"}</b><small>Evidence confidence {hybrid ? percentage(hybrid.policyRegimeConfidence) : 0}%</small></div>
+          <div className="hero-calibrated-probability"><span>CALIBRATED NEXT-{forecast.horizonHours}H PROBABILITY</span><b data-testid="hero-calibrated-probability">{percentage(forecast.probability)}%</b><small>{percentage(forecast.credibleIntervalLow)}–{percentage(forecast.credibleIntervalHigh)}%</small></div>
         </div>
         <dl className="hero-final-meta" aria-label="Current forecast details">
           <div><dt>Trend</dt><dd className={`trend-${trend.toLowerCase()}`}>{trend}</dd></div>

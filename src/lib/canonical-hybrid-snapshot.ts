@@ -177,6 +177,35 @@ export async function loadCanonicalHybridSnapshot(providedClient?: SupabaseClien
     persistedForecasts = forecastRows.map(row => ({ id: row.id, generatedAt: row.generated_at, modelVersion, probability: row.probability, credibleIntervalLow: row.credible_interval_low, credibleIntervalHigh: row.credible_interval_high, evidencePostIds: row.evidence_post_ids ?? [] }));
     persistedForecast = persistedForecasts[0] ?? null;
   }
+  const latestReset = resetEvents
+    .filter(event => event.verified && Date.parse(event.occurredAt) <= Date.parse(cutoff))
+    .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0] ?? null;
+  const hasResolvedReference = latestReset
+    ? persistedForecasts.some(item => Date.parse(item.generatedAt) >= Date.parse(latestReset.occurredAt)
+      && item.probability >= .98
+      && (!latestReset.sourceRecordId || item.evidencePostIds?.includes(latestReset.sourceRecordId)))
+    : false;
+  if (latestReset && !hasResolvedReference) {
+    let resolvedQuery = client.from("forecasts")
+      .select("id,forecast_model_id,generated_at,probability,credible_interval_low,credible_interval_high,evidence_post_ids")
+      .gte("generated_at", latestReset.occurredAt)
+      .gte("probability", .98)
+      .order("generated_at", { ascending: true })
+      .limit(1);
+    if (latestReset.sourceRecordId) resolvedQuery = resolvedQuery.contains("evidence_post_ids", [latestReset.sourceRecordId]);
+    const resolvedResult = await resolvedQuery.maybeSingle();
+    if (resolvedResult.error) throw resolvedResult.error;
+    if (resolvedResult.data) {
+      const resolvedRow = forecastReferenceSchema.parse(resolvedResult.data);
+      let resolvedModelVersion = MODEL_V2_VERSION;
+      if (resolvedRow.forecast_model_id) {
+        const resolvedModelResult = await client.from("forecast_models").select("version").eq("id", resolvedRow.forecast_model_id).maybeSingle();
+        if (resolvedModelResult.error) throw resolvedModelResult.error;
+        resolvedModelVersion = String(resolvedModelResult.data?.version ?? MODEL_V2_VERSION);
+      }
+      persistedForecasts.push({ id: resolvedRow.id, generatedAt: resolvedRow.generated_at, modelVersion: resolvedModelVersion, probability: resolvedRow.probability, credibleIntervalLow: resolvedRow.credible_interval_low, credibleIntervalHigh: resolvedRow.credible_interval_high, evidencePostIds: resolvedRow.evidence_post_ids ?? [] });
+    }
+  }
   const snapshot = buildCanonicalHybridSnapshot({ cutoff, evidence, signals, resetEvents, context, persistedForecast, persistedForecasts, simulations: Number(process.env.MONTE_CARLO_SIMULATIONS ?? 5000), seed: Number(process.env.MONTE_CARLO_SEED ?? 20260716) });
   return { ...snapshot, mode: "live", posts: postRecords, account: { username: String(accountResult.data.username), displayName: String(accountResult.data.display_name ?? accountResult.data.username), profileImageUrl: typeof accountResult.data.profile_image_url === "string" ? accountResult.data.profile_image_url : null }, lastUpdatedAt: String(postRecords[0]?.ingested_at ?? postRecords[0]?.posted_at ?? cutoff), context };
 }

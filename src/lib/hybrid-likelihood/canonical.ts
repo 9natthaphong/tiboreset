@@ -57,9 +57,11 @@ export function buildCanonicalHybridSnapshot(input: {
     : input.evidence.filter(item => Date.parse(item.postedAt) <= Date.parse(input.cutoff));
   const forecastReferences = input.persistedForecasts ?? (input.persistedForecast ? [input.persistedForecast] : []);
   const resolvedForecast = latestReset
-    ? forecastReferences.find(item => latestReset.sourceRecordId
-      ? item.evidencePostIds?.includes(latestReset.sourceRecordId)
-      : Date.parse(item.generatedAt) >= Date.parse(latestReset.occurredAt) && item.probability >= .98) ?? null
+    ? forecastReferences
+      .filter(item => Date.parse(item.generatedAt) >= Date.parse(latestReset.occurredAt)
+        && item.probability >= .98
+        && (!latestReset.sourceRecordId || item.evidencePostIds?.includes(latestReset.sourceRecordId)))
+      .sort((a, b) => Date.parse(a.generatedAt) - Date.parse(b.generatedAt))[0] ?? null
     : null;
   const context = mergeResetIntoContext(input.context, input.resetEvents);
   const forecast = forecastFromEvidence(activeCycleEvidence, input.cutoff, 36, input.simulations, input.seed, context);

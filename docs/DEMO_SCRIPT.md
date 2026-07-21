@@ -17,9 +17,9 @@ Open <http://localhost:3000> and point out the **Demo Mode** label before using 
 
 Open the production hero. Show the latest official completed reset, its timestamp and source, then explain that it resolved the previous forecast and immediately began a new active cycle.
 
-### 0:25–0:45 — Live Reset Likelihood
+### 0:25–0:45 — Policy, readiness, and probability
 
-Explain that the primary 30–98 score is cycle-aware and operational. It combines cycle timing, verified history, Reset Oracle v2, and structured current signals. It is not statistically calibrated.
+Show the three separate readouts. **Reset Policy** reports whether official evidence supports continuing resets. **Reset Watch Score** reports operational readiness as `/ 100`, not a probability. **Reset Oracle v2** remains the calibrated next-36-hour estimate.
 
 ### 0:45–1:05 — Calibrated 36-hour probability
 
@@ -43,7 +43,7 @@ Open **Advanced Diagnostics**. Show the active cycle, calibrated model version, 
 
 Show the cached one-month backtest. Reset Oracle v2's strict pre-announcement Brier score is 0.1127 versus 0.1522 for v1 and 0.1320 for the constant baseline. It crossed 30% before two of four announcements and 50% before one.
 
-Use the required interpretation: **Promising but unvalidated.** Four announcements cannot establish general reliability. The Live Reset Likelihood is not part of this Brier-score comparison.
+Use the required interpretation: **Promising but unvalidated.** Four announcements cannot establish general reliability. The Reset Watch Score is not part of this Brier-score comparison.
 
 ### 2:30–3:00 — Public Data Lab
 
@@ -55,4 +55,4 @@ Demo Mode remains useful for an offline walkthrough of synthetic ingestion, extr
 
 ## Close
 
-Sacred Forecast is an unofficial planning aid. It is not affiliated with OpenAI or X. Reset Oracle v2's historical simulation is not a guarantee of future resets, and Live Reset Likelihood is an operational score rather than a calibrated probability.
+Sacred Forecast is an unofficial planning aid. It is not affiliated with OpenAI or X. Reset Oracle v2's historical simulation is not a guarantee of future resets, and the Reset Watch Score is an operational-readiness score rather than a calibrated probability.
