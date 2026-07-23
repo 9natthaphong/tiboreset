@@ -13,7 +13,8 @@ import { loadExternalContextEvents } from "@/lib/external-context";
 import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHistory } from "@/lib/historical-data";
 import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMilestoneState, PublicMode, PublicSnapshot, ResetHistoryItem } from "@/lib/public-data-types";
 import { buildMilestoneSeedRows } from "@/lib/historical-data";
-import { deriveMilestoneState, type MilestoneEvent } from "@/lib/milestones";
+import type { MilestoneEvent } from "@/lib/milestones";
+import { mergeVerifiedResetHistory, milestoneHistoryDescription, publicMilestoneState } from "@/lib/reset-history";
 import { forecastFreshness, sourceFreshness } from "@/lib/forecasting/current-refresh";
 import { sanitizeIngestionFailure, type IngestionFailureCategory } from "@/lib/ingestion/errors";
 import { loadCanonicalHybridSnapshot, type LoadedCanonicalHybridSnapshot } from "@/lib/canonical-hybrid-snapshot";
@@ -150,23 +151,6 @@ function demoResetHistory(): ResetHistoryItem[] {
   const seeded = historicalSeedResetHistory();
   if (seeded.length) return seeded;
   return demo.timeline.map(item => ({ ...item, timeSincePreviousDays: undefined, milestoneUsers: extractMilestoneUsers(item.reason, item.description), verificationStatus: "verified" as const, historicalSource: "demo" as const }));
-}
-
-function mergeVerifiedResetHistory(primary: ResetHistoryItem[], seeded = historicalSeedResetHistory()): ResetHistoryItem[] {
-  const seen = new Set<string>();
-  return [...seeded, ...primary]
-    .filter(item => {
-      const key = item.sourcePostId ?? item.id;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return item.verificationStatus !== "rejected";
-    })
-    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-}
-
-function publicMilestoneState(events: MilestoneEvent[]): PublicMilestoneState {
-  const state = deriveMilestoneState(events);
-  return { latestReportedUsers: state.latestReported?.reportedActiveUsers ?? null, latestVerifiedResetUsers: state.latestVerifiedReset?.reportedActiveUsers ?? null, latestResetType: state.latestVerifiedReset?.resetType ?? null, latestEventDate: state.latestVerifiedReset?.announcedAt ?? null, nextTargetUsers: state.nextTargetUsers, progressPercent: state.progressPercent, pledgedMilestoneReached: state.pledgedMilestoneReached, policyId: state.policy.policyId };
 }
 
 const seedMilestoneState = () => publicMilestoneState(buildMilestoneSeedRows());
@@ -346,7 +330,14 @@ function resolvedResetHistoryItem(reset: HybridResetEvent | null): ResetHistoryI
 async function liveResetHistory(client: SupabaseClient): Promise<ResetHistoryItem[]> {
   const milestoneResult = await client.from("milestone_events").select("id,source_post_id,source_url,source_account,reported_active_users,denominator,reset_type,announced_at,verification_status").eq("verification_status", "verified").order("announced_at", { ascending: false }).limit(50);
   if (!milestoneResult.error) {
-    return (milestoneResult.data ?? []).map((row, index, rows) => ({ id: String(row.id), date: String(row.announced_at), type: String(row.reset_type), reason: "user_milestone", description: `${Number(row.reported_active_users) / 1_000_000}M ${String(row.denominator).replaceAll("_", " ")} milestone.`, sourceUrl: String(row.source_url), included: true, timeSincePreviousDays: rows[index + 1] ? Math.round((Date.parse(String(row.announced_at)) - Date.parse(String(rows[index + 1].announced_at))) / 864e5) : undefined, milestoneUsers: Number(row.reported_active_users), verificationBadge: "verified", sourceAccount: String(row.source_account), verificationStatus: "verified", historicalSource: "live", sourcePostId: String(row.source_post_id), denominator: row.denominator as ResetHistoryItem["denominator"] }));
+    return (milestoneResult.data ?? []).map((row, index, rows) => {
+      const event = {
+        reportedActiveUsers: Number(row.reported_active_users),
+        denominator: row.denominator as MilestoneEvent["denominator"],
+        resetType: row.reset_type as MilestoneEvent["resetType"],
+      };
+      return { id: String(row.id), date: String(row.announced_at), type: String(row.reset_type), reason: "user_milestone", description: milestoneHistoryDescription(event), sourceUrl: String(row.source_url), included: true, timeSincePreviousDays: rows[index + 1] ? Math.round((Date.parse(String(row.announced_at)) - Date.parse(String(rows[index + 1].announced_at))) / 864e5) : undefined, milestoneUsers: Number(row.reported_active_users), verificationBadge: "verified" as const, sourceAccount: String(row.source_account), verificationStatus: "verified" as const, historicalSource: "live" as const, sourcePostId: String(row.source_post_id), denominator: row.denominator as ResetHistoryItem["denominator"] };
+    });
   }
   const result = await client.from("known_reset_events").select("id,occurred_at,reset_type,reason_category,description,source_post_id").eq("verified", true).order("occurred_at", { ascending: false }).limit(20);
   if (result.error) throw new Error("reset history unavailable");
@@ -481,7 +472,7 @@ export async function getPublicSnapshot(): Promise<PublicSnapshot> {
       const forecasts = await liveForecasts(client);
       const [resetHistory, milestoneState, health] = await Promise.all([liveResetHistory(client), liveMilestoneState(client), getPublicHealth()]);
       const resolvedHistory = resolvedResetHistoryItem(canonical.hybrid.confirmation);
-      return { forecast: canonical.forecast, history: historyFromForecasts(forecasts, canonical.evidence, canonical.hybrid.confirmation, canonical.forecast), evidence: canonical.evidence, latestPosts: latestPostsFromCanonical(canonical, 20), resetHistory: mergeVerifiedResetHistory(resolvedHistory ? [resolvedHistory, ...resetHistory] : resetHistory), milestoneState, historicalDataset, externalContextEvents, health, hybrid: canonical.hybrid, hybridStatus: "available", canonicalCutoff: canonical.cutoff };
+      return { forecast: canonical.forecast, history: historyFromForecasts(forecasts, canonical.evidence, canonical.hybrid.confirmation, canonical.forecast), evidence: canonical.evidence, latestPosts: latestPostsFromCanonical(canonical, 20), resetHistory: mergeVerifiedResetHistory(resolvedHistory ? [resolvedHistory, ...resetHistory] : resetHistory, historicalSeedResetHistory()), milestoneState, historicalDataset, externalContextEvents, health, hybrid: canonical.hybrid, hybridStatus: "available", canonicalCutoff: canonical.cutoff };
     } catch { /* Safe, clearly labelled Demo fallback below. */ }
   }
   const mode = configuredMode();
@@ -501,6 +492,6 @@ export async function getPublicEvidence(): Promise<Evidence[]> {
 
 export async function getResetHistory(): Promise<ResetHistoryItem[]> {
   const client = configuredMode() === "live" ? serverClient() : null;
-  if (client) try { return mergeVerifiedResetHistory(await liveResetHistory(client)); } catch { /* demo fallback */ }
+  if (client) try { return mergeVerifiedResetHistory(await liveResetHistory(client), historicalSeedResetHistory()); } catch { /* demo fallback */ }
   return demoResetHistory();
 }

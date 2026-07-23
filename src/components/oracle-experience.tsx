@@ -15,7 +15,7 @@ import type { ExternalContextEvent } from "@/lib/external-context";
 import type { HistoricalDatasetSummary, HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMilestoneState, ResetHistoryItem } from "@/lib/public-data-types";
 import { getUsageGuidance } from "@/lib/usage-guidance";
 import { CinematicHero } from "./cinematic-hero";
-import { deriveMilestoneState } from "@/lib/milestones";
+import { publicMilestoneState } from "@/lib/reset-history";
 import type { PublicBacktestSummary } from "@/lib/backtest-report";
 import { formatResetEventTimes, formatUtcShortDate, formatUtcTimestamp } from "@/lib/format-date";
 import { PublicVisitCounter } from "./public-visit-counter";
@@ -68,11 +68,10 @@ export function OracleExperience({ initialForecast, initialHybrid, hybridStatus:
   const currentMilestoneState = useMemo<PublicMilestoneState>(() => {
     const events = resetHistory.filter(item => item.milestoneUsers && item.sourcePostId && item.sourceUrl && item.denominator).map(item => ({ sourcePostId: item.sourcePostId!, sourceUrl: item.sourceUrl!, sourceAccount: item.sourceAccount ?? "@thsottiaux", reportedActiveUsers: item.milestoneUsers!, denominator: item.denominator!, resetType: (["full", "banked", "scheduled", "announcement_only"].includes(item.type) ? item.type : "announcement_only") as "full" | "banked" | "scheduled" | "announcement_only", announcedAt: item.date, executionAt: item.type === "full" || item.type === "banked" ? item.date : null, verificationStatus: "verified" as const, verificationMethod: "public_snapshot", rejectionReason: null }));
     if (!events.length) return milestoneState;
-    const derived = deriveMilestoneState(events);
-    return { latestReportedUsers: derived.latestReported?.reportedActiveUsers ?? null, latestVerifiedResetUsers: derived.latestVerifiedReset?.reportedActiveUsers ?? null, latestResetType: derived.latestVerifiedReset?.resetType ?? null, latestEventDate: derived.latestVerifiedReset?.announcedAt ?? null, nextTargetUsers: derived.nextTargetUsers, progressPercent: derived.progressPercent, pledgedMilestoneReached: derived.pledgedMilestoneReached, policyId: derived.policy.policyId };
+    return publicMilestoneState(events);
   }, [milestoneState, resetHistory]);
-  const latestKnownReset = currentMilestoneState.latestVerifiedResetUsers
-    ? `${forecast.mode === "demo" ? "Demo · " : ""}${currentMilestoneState.latestVerifiedResetUsers / 1_000_000}M combined active users`
+  const latestKnownReset = currentMilestoneState.latestReportedUsers
+    ? `${forecast.mode === "demo" ? "Demo · " : ""}${currentMilestoneState.latestReportedUsers / 1_000_000}M combined active users`
     : historicalDataset.latestMilestoneLabel ?? "Not yet seeded";
 
   const refreshPublicData = useCallback((announce = true) => {
@@ -267,7 +266,7 @@ function ResetHistory({ resetHistory, milestoneState, historicalDataset, mode }:
       <b>{latestMilestone.type === "scheduled" ? "RESET SCHEDULED" : `${latestMilestone.type.toUpperCase()} RESET ANNOUNCED`}</b>
       <time dateTime={latestMilestone.displayDateThailand ?? latestMilestone.date}>{latestMilestone.displayDateThailand ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" }).format(new Date(`${latestMilestone.displayDateThailand}T00:00:00+07:00`)) : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(latestMilestone.date))}</time>
       <div className="next-milestone"><span>{milestoneState.pledgedMilestoneReached ? "PLEDGED MILESTONE REACHED" : "NEXT PLEDGED MILESTONE"}</span><b>{milestoneState.nextTargetUsers ? `${milestoneState.nextTargetUsers / 1_000_000}M` : "AWAITING NEW COMMITMENT"}</b><small>MILESTONE PROGRESS · {milestoneState.progressPercent ?? 0}%</small></div>
-      <p>The July 9M figure covers Codex and ChatGPT Work combined. The latest official Codex-only figure was 5M+ weekly users on June 2.</p>
+      <p>The {latestMilestone.milestoneUsers ? `${latestMilestone.milestoneUsers / 1_000_000}M` : "latest"} figure covers Codex and ChatGPT Work combined. {latestMilestone.type === "scheduled" ? "The official source announced a scheduled usage reset; completed execution is not claimed. " : ""}The latest verified Codex-only figure remains distinct.</p>
       {latestMilestone.sourceUrl && <a href={latestMilestone.sourceUrl} target="_blank" rel="noreferrer" onClick={() => track("view_official_source")}>View official post <ExternalLink size={14}/></a>}
     </div>}
 

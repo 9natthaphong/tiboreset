@@ -46,6 +46,34 @@ async function main() {
     storedConfidence: proposed.extraction_confidence,
     storedRequiresReview: proposed.requires_review,
   });
+  const parsedMilestoneCandidate = createMilestoneCandidate({
+    text: record.text,
+    sourcePostId: record.platform_post_id,
+    sourceUrl: record.post_url ?? `https://x.com/i/status/${record.platform_post_id}`,
+    sourceAccount: snapshot.account.username,
+    announcedAt: record.posted_at,
+  });
+  const milestoneCandidate = parsedMilestoneCandidate && proposedResolution
+    ? { ...parsedMilestoneCandidate, verificationMethod: "reviewed_stored_post_correction_v1" }
+    : parsedMilestoneCandidate;
+  const milestoneBeforeResult = await client.from("milestone_events")
+    .select("id,source_post_id,source_url,source_account,reported_active_users,denominator,reset_type,announced_at,execution_at,verification_status,verification_method,rejection_reason")
+    .eq("source_post_id", record.platform_post_id)
+    .maybeSingle();
+  if (milestoneBeforeResult.error) throw milestoneBeforeResult.error;
+  const milestoneAfter = milestoneCandidate ? {
+    sourcePostId: milestoneCandidate.sourcePostId,
+    sourceUrl: milestoneCandidate.sourceUrl,
+    sourceAccount: milestoneCandidate.sourceAccount,
+    reportedActiveUsers: milestoneCandidate.reportedActiveUsers,
+    denominator: milestoneCandidate.denominator,
+    resetType: milestoneCandidate.resetType,
+    announcedAt: milestoneCandidate.announcedAt,
+    executionAt: milestoneCandidate.executionAt,
+    verificationStatus: milestoneCandidate.verificationStatus,
+    verificationMethod: milestoneCandidate.verificationMethod,
+    rejectionReason: milestoneCandidate.rejectionReason,
+  } : null;
   const proposedSignal = {
     ...record.signal,
     signal: proposedStructuredSignal,
@@ -119,6 +147,12 @@ async function main() {
     scoreDifference: projected.hybrid.watchScore - snapshot.hybrid.watchScore,
     currentCalibratedProbability: snapshot.forecast.probability,
     projectedCalibratedProbability: projected.forecast.probability,
+    milestoneCorrection: {
+      before: milestoneBeforeResult.data,
+      proposed: milestoneAfter,
+      deduplicationKey: record.platform_post_id,
+      persistenceMode: "idempotent_upsert_on_source_post_id",
+    },
     externalXCalls: 0,
     externalOpenAICalls: 0,
     mutationPerformed: false,
@@ -144,22 +178,15 @@ async function main() {
     if (updated.error) throw updated.error;
     persisted = true;
   }
-  const candidate = createMilestoneCandidate({
-    text: record.text,
-    sourcePostId: record.platform_post_id,
-    sourceUrl: record.post_url ?? proposedSignal.sourceUrl,
-    sourceAccount: snapshot.account.username,
-    announcedAt: record.posted_at,
-  });
-  if (candidate && proposedResolution) {
+  if (milestoneCandidate && proposedResolution) {
     const repository = new SupabaseIngestionRepository(client);
     await repository.upsertMilestoneCandidate({
-      candidate,
+      candidate: milestoneCandidate,
       post: { databaseId: record.id, platformPostId: record.platform_post_id },
     });
   }
   const refreshed = await loadCanonicalHybridSnapshot(client);
-  console.log(JSON.stringify({ persisted, extractionId, reason: persisted ? "corrected_extraction_inserted" : "idempotent_existing_extraction", milestoneSynchronized: Boolean(candidate && proposedResolution), canonicalSnapshotRefreshed: true, watchScore: refreshed.hybrid.watchScore, winningChannel: refreshed.hybrid.maxWinningChannel, calibratedProbability: refreshed.forecast.probability, cycleStartAt: refreshed.hybrid.cycleStartAt, elapsedCycleHours: refreshed.hybrid.elapsedCycleHours, cyclePressureChannel: refreshed.hybrid.cyclePressureChannel, policyTimingChannel: refreshed.hybrid.policyTimingChannel, timingChannel: refreshed.hybrid.timingChannel, policyRegimeState: refreshed.hybrid.policyRegimeState, policySourcePostId: refreshed.hybrid.policyRegimeSourcePostId }));
+  console.log(JSON.stringify({ persisted, extractionId, reason: persisted ? "corrected_extraction_inserted" : "idempotent_existing_extraction", milestoneSynchronized: Boolean(milestoneCandidate && proposedResolution), milestoneVerificationMethod: milestoneCandidate?.verificationMethod ?? null, canonicalSnapshotRefreshed: true, watchScore: refreshed.hybrid.watchScore, winningChannel: refreshed.hybrid.maxWinningChannel, calibratedProbability: refreshed.forecast.probability, cycleStartAt: refreshed.hybrid.cycleStartAt, elapsedCycleHours: refreshed.hybrid.elapsedCycleHours, cyclePressureChannel: refreshed.hybrid.cyclePressureChannel, policyTimingChannel: refreshed.hybrid.policyTimingChannel, timingChannel: refreshed.hybrid.timingChannel, policyRegimeState: refreshed.hybrid.policyRegimeState, policySourcePostId: refreshed.hybrid.policyRegimeSourcePostId }));
 }
 
 main().catch((error: unknown) => {

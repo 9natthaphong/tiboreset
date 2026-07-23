@@ -14,5 +14,6 @@ export async function GET() {
     evidence: snapshot.evidence,
     history: snapshot.history,
     resetHistory: snapshot.resetHistory,
+    milestoneState: snapshot.milestoneState,
   }, { headers: { "Cache-Control": "no-store" } });
 }
