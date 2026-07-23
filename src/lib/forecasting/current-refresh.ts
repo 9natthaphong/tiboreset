@@ -4,6 +4,7 @@ import { MODEL_V2_VERSION, policyAlertBand } from "@/lib/forecasting/v2";
 export const FORECAST_MATERIALITY_THRESHOLD = 0.005;
 export const FORECAST_MAX_SNAPSHOT_AGE_MS = 60 * 60 * 1_000;
 export const FORECAST_FRESHNESS_AGE_MS = 90 * 60 * 1_000;
+export const SOURCE_FRESHNESS_AGE_MS = 45 * 60 * 1_000;
 
 export type StoredForecastSummary = {
   id: string;
@@ -51,6 +52,12 @@ export function forecastFreshness(calculatedAt: string | null, modelVersion: str
   if (!calculatedAt || modelVersion !== MODEL_V2_VERSION) return "STALE";
   const age = now.getTime() - Date.parse(calculatedAt);
   return Number.isFinite(age) && age >= 0 && age < FORECAST_FRESHNESS_AGE_MS ? "FRESH" : "STALE";
+}
+
+export function sourceFreshness(lastSuccessfulIngestionAt: string | null, now = new Date()): "FRESH" | "STALE" {
+  if (!lastSuccessfulIngestionAt) return "STALE";
+  const age = now.getTime() - Date.parse(lastSuccessfulIngestionAt);
+  return Number.isFinite(age) && age >= 0 && age < SOURCE_FRESHNESS_AGE_MS ? "FRESH" : "STALE";
 }
 
 export async function refreshCurrentForecast(input: {

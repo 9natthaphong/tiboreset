@@ -3,6 +3,7 @@ import type { Forecast, ForecastContext } from "@/lib/forecasting";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
 import type { MilestoneEvent } from "@/lib/milestones";
 import type { ForecastSaveReason, StoredForecastSummary } from "@/lib/forecasting/current-refresh";
+import type { IngestionFailureCategory } from "./errors";
 
 export type StoredAccount = SocialAccount & { databaseId: string; latestProcessedPostId?: string };
 export type StoredPost = { databaseId: string; platformPostId: string };
@@ -34,10 +35,27 @@ export type IngestionReport = {
   xResourcesConsumed: number;
 };
 
+export type IngestionFailureReport = {
+  completedAt: string;
+  durationMs: number;
+  safeError: string;
+  failureCategory: IngestionFailureCategory;
+  postsRead: number;
+  postsInserted: number;
+  postsAnalyzed: number;
+  xResourcesConsumed: number;
+  forecastRecalculated: boolean;
+  forecastChanged: boolean;
+  forecastSaveReason: ForecastSaveReason | null;
+  forecastCalculatedAt: string | null;
+  forecastModelVersion: string | null;
+  forecastId: string | null;
+};
+
 export interface IngestionRepository {
   startRun(input: { source: "x"; startedAt: string }): Promise<string>;
   completeRun(runId: string, report: IngestionReport): Promise<void>;
-  failRun(runId: string, input: { completedAt: string; durationMs: number; safeError: string; postsRead: number; postsInserted: number; postsAnalyzed: number; xResourcesConsumed: number }): Promise<void>;
+  failRun(runId: string, input: IngestionFailureReport): Promise<void>;
   findAccount(username: string): Promise<StoredAccount | null>;
   upsertAccount(account: SocialAccount): Promise<StoredAccount>;
   findExistingPostIds(platformPostIds: string[]): Promise<Set<string>>;

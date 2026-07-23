@@ -4,6 +4,7 @@ import type { SocialPost, SocialSourceAdapter } from "@/lib/social/adapters";
 import type { ExtractionResult, IngestionReport, IngestionRepository } from "./types";
 import { createMilestoneCandidate } from "@/lib/milestones";
 import { enforceExtractionSafety } from "@/lib/extraction/safety";
+import { sanitizeIngestionFailure } from "./errors";
 
 const MAX_X_POSTS_PER_RUN = 10;
 
@@ -51,6 +52,7 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
   let postsAnalyzed = 0;
   let xResourcesConsumed = 0;
   let accountResolved = false;
+  let forecastAttempted = false;
   try {
     let account = await dependencies.repository.findAccount(dependencies.username);
     if (!account) {
@@ -91,6 +93,7 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
       if (candidate) await dependencies.repository.upsertMilestoneCandidate?.({ candidate, post: storedPost });
     }
     const forecastCalculatedAt = now().toISOString();
+    forecastAttempted = true;
     const refresh = await refreshCurrentForecast({ repository: dependencies.repository, calculatedAt: forecastCalculatedAt, horizonHours: dependencies.horizonHours });
     const latestId = newestPostId(uniquePosts, batch.newestId);
     if (latestId) await dependencies.repository.updateLatestProcessedPostId(account.databaseId, latestId, now().toISOString());
@@ -116,15 +119,58 @@ export async function runIngestion(dependencies: IngestionDependencies): Promise
     await dependencies.repository.completeRun(runId, report);
     return report;
   } catch (error) {
+    const safeFailure = sanitizeIngestionFailure(error);
+    let recovery: {
+      forecastRecalculated: boolean;
+      forecastChanged: boolean;
+      forecastSaveReason: IngestionReport["forecastSaveReason"] | null;
+      forecastCalculatedAt: string | null;
+      forecastModelVersion: string | null;
+      forecastId: string | null;
+    } = {
+      forecastRecalculated: false,
+      forecastChanged: false,
+      forecastSaveReason: null,
+      forecastCalculatedAt: null,
+      forecastModelVersion: null,
+      forecastId: null,
+    };
+    // A failed X/provider check must not freeze the time-dependent v2 forecast.
+    // This recovery path reads only already-stored evidence and never invokes X
+    // or OpenAI. Source freshness remains stale because the run is still failed.
+    if (!forecastAttempted) {
+      const forecastCalculatedAt = now().toISOString();
+      try {
+        const refresh = await refreshCurrentForecast({
+          repository: dependencies.repository,
+          calculatedAt: forecastCalculatedAt,
+          horizonHours: dependencies.horizonHours,
+        });
+        recovery = {
+          forecastRecalculated: true,
+          forecastChanged: refresh.forecastChanged,
+          forecastSaveReason: refresh.forecastSaveReason,
+          forecastCalculatedAt,
+          forecastModelVersion: refresh.forecast.modelVersion,
+          forecastId: refresh.forecastId,
+        };
+      } catch {
+        // The original provider failure remains the audited failure. Recovery
+        // failure is represented by forecastRecalculated=false without leaking
+        // an internal database/provider message.
+      }
+    }
     const completedAt = now().toISOString();
     await dependencies.repository.failRun(runId, {
       completedAt,
       durationMs: Math.max(0, now().getTime() - started.getTime()),
-      safeError: error instanceof Error ? error.message.slice(0, 300) : "Ingestion failed",
+      safeError: safeFailure.message,
+      failureCategory: safeFailure.category,
       postsRead,
       postsInserted,
       postsAnalyzed,
       xResourcesConsumed,
+      ...recovery,
     });
     throw error;
   }

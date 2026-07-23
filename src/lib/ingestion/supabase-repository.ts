@@ -9,7 +9,7 @@ import { policyAlertBand } from "@/lib/forecasting/v2";
 import type { StoredForecastSummary } from "@/lib/forecasting/current-refresh";
 import { extractMilestoneUsers, type KnownResetSeedRow, type HistoricalSeedRepository } from "@/lib/historical-data";
 import { versionedForecastContext } from "@/lib/forecast-context";
-import type { ExtractionResult, IngestionReport, IngestionRepository, StoredAccount, StoredExtraction, StoredPost } from "./types";
+import type { ExtractionResult, IngestionFailureReport, IngestionReport, IngestionRepository, StoredAccount, StoredExtraction, StoredPost } from "./types";
 import type { SocialAccount, SocialPost } from "@/lib/social/adapters";
 import { MILESTONE_TARGET_POLICY, type MilestoneEvent } from "@/lib/milestones";
 
@@ -79,7 +79,7 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
     throwOnError(result.error, "Unable to complete ingestion run");
   }
 
-  async failRun(runId: string, input: { completedAt: string; durationMs: number; safeError: string; postsRead: number; postsInserted: number; postsAnalyzed: number; xResourcesConsumed: number }) {
+  async failRun(runId: string, input: IngestionFailureReport) {
     const result = await this.client.from("ingestion_runs").update({
       completed_at: input.completedAt,
       status: "failure",
@@ -87,7 +87,18 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
       posts_inserted: input.postsInserted,
       posts_analyzed: input.postsAnalyzed,
       error_message: input.safeError,
-      metadata: { durationMs: input.durationMs, xResourcesConsumed: input.xResourcesConsumed, boundedFetchLimit: 10 },
+      metadata: {
+        durationMs: input.durationMs,
+        failureCategory: input.failureCategory,
+        xResourcesConsumed: input.xResourcesConsumed,
+        boundedFetchLimit: 10,
+        forecastRecalculated: input.forecastRecalculated,
+        forecastChanged: input.forecastChanged,
+        forecastSaveReason: input.forecastSaveReason,
+        forecastCalculatedAt: input.forecastCalculatedAt,
+        forecastModelVersion: input.forecastModelVersion,
+        forecastId: input.forecastId,
+      },
     }).eq("id", runId);
     throwOnError(result.error, "Unable to record ingestion failure");
   }

@@ -14,7 +14,8 @@ import { extractMilestoneUsers, historicalDatasetSummary, historicalSeedResetHis
 import type { HistoryPoint, LatestPost, LatestPostsResponse, PublicHealth, PublicMilestoneState, PublicMode, PublicSnapshot, ResetHistoryItem } from "@/lib/public-data-types";
 import { buildMilestoneSeedRows } from "@/lib/historical-data";
 import { deriveMilestoneState, type MilestoneEvent } from "@/lib/milestones";
-import { forecastFreshness } from "@/lib/forecasting/current-refresh";
+import { forecastFreshness, sourceFreshness } from "@/lib/forecasting/current-refresh";
+import { sanitizeIngestionFailure, type IngestionFailureCategory } from "@/lib/ingestion/errors";
 import { loadCanonicalHybridSnapshot, type LoadedCanonicalHybridSnapshot } from "@/lib/canonical-hybrid-snapshot";
 import { calculateHybridLikelihood, type HybridLikelihood, type HybridResetEvent, type HybridSignalInput } from "@/lib/hybrid-likelihood";
 import { localExtract } from "@/lib/extraction/local";
@@ -172,7 +173,30 @@ const seedMilestoneState = () => publicMilestoneState(buildMilestoneSeedRows());
 
 function demoHealth(): PublicHealth {
   const forecast = currentForecast();
-  return { app: "ok", mode: "demo", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: forecast.dataCutoff, lastForecastAt: forecast.generatedAt, lastForecastCalculatedAt: forecast.generatedAt, lastForecastSavedAt: forecast.generatedAt, currentModelVersion: forecast.modelVersion, forecastFreshness: forecastFreshness(forecast.generatedAt, forecast.modelVersion), latestRun: null };
+  return {
+    app: "ok",
+    mode: "demo",
+    database: "unavailable",
+    xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable",
+    openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable",
+    email: getEmailConfigurationStatus(),
+    sourceFreshness: "FRESH",
+    lastIngestionAt: forecast.dataCutoff,
+    lastSuccessfulIngestionAt: forecast.dataCutoff,
+    latestIngestionAttemptAt: forecast.dataCutoff,
+    latestIngestionResult: "success",
+    latestIngestionFailureCategory: null,
+    newestStoredSourcePostAt: null,
+    lastForecastAt: forecast.generatedAt,
+    lastForecastCalculatedAt: forecast.generatedAt,
+    lastForecastSavedAt: forecast.generatedAt,
+    forecastDataCutoff: forecast.dataCutoff,
+    latestSavedCalibratedProbability: forecast.probability,
+    latestSavedRoundedPercent: Math.round(forecast.probability * 100),
+    currentModelVersion: forecast.modelVersion,
+    forecastFreshness: forecastFreshness(forecast.generatedAt, forecast.modelVersion),
+    latestRun: null,
+  };
 }
 
 async function livePosts(client: SupabaseClient, limit: number): Promise<LatestPostsResponse> {
@@ -344,25 +368,105 @@ export async function getPublicHealth(): Promise<PublicHealth> {
   const client = mode === "live" ? serverClient() : null;
   if (!client) return demoHealth();
   try {
-    const [forecastResult, ingestionResult] = await Promise.all([
-      client.from("forecasts").select("generated_at,forecast_model_id").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
-      client.from("ingestion_runs").select("completed_at,posts_read,posts_inserted,posts_analyzed,metadata").eq("status", "success").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
+    const [forecastResult, latestAttemptResult, latestSuccessResult, newestPostResult] = await Promise.all([
+      client.from("forecasts").select("generated_at,data_cutoff,probability,forecast_model_id").order("generated_at", { ascending: false }).limit(1).maybeSingle(),
+      client.from("ingestion_runs").select("started_at,completed_at,status,posts_read,posts_inserted,posts_analyzed,error_message,metadata").order("started_at", { ascending: false }).limit(1).maybeSingle(),
+      client.from("ingestion_runs").select("started_at,completed_at,status,posts_read,posts_inserted,posts_analyzed,metadata").eq("status", "success").order("completed_at", { ascending: false }).limit(1).maybeSingle(),
+      client.from("source_posts").select("posted_at").order("posted_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
-    if (forecastResult.error || ingestionResult.error) throw new Error("health unavailable");
+    if (forecastResult.error || latestAttemptResult.error || latestSuccessResult.error || newestPostResult.error) throw new Error("health unavailable");
     const modelResult = forecastResult.data?.forecast_model_id
       ? await client.from("forecast_models").select("version").eq("id", forecastResult.data.forecast_model_id).maybeSingle()
       : { data: null, error: null };
     if (modelResult.error) throw new Error("forecast model unavailable");
-    const run = ingestionResult.data;
-    const metadata = run?.metadata && typeof run.metadata === "object" ? run.metadata as Record<string, unknown> : {};
+    const latestAttempt = latestAttemptResult.data;
+    const latestSuccess = latestSuccessResult.data;
+    const attemptMetadata = latestAttempt?.metadata && typeof latestAttempt.metadata === "object" ? latestAttempt.metadata as Record<string, unknown> : {};
+    const successMetadata = latestSuccess?.metadata && typeof latestSuccess.metadata === "object" ? latestSuccess.metadata as Record<string, unknown> : {};
     const savedAt = forecastResult.data?.generated_at ?? null;
     const storedModelVersion = typeof modelResult.data?.version === "string" ? modelResult.data.version : null;
-    const runCalculatedAt = typeof metadata.forecastCalculatedAt === "string" ? metadata.forecastCalculatedAt : null;
-    const savedForecastIsNewer = savedAt != null && (runCalculatedAt == null || Date.parse(savedAt) >= Date.parse(runCalculatedAt));
-    const calculatedAt = savedForecastIsNewer ? savedAt : runCalculatedAt;
-    const calculationModelVersion = savedForecastIsNewer ? storedModelVersion : typeof metadata.forecastModelVersion === "string" ? metadata.forecastModelVersion : storedModelVersion;
-    return { app: "ok", mode: "live", database: "connected", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: run?.completed_at ?? null, lastForecastAt: savedAt, lastForecastCalculatedAt: calculatedAt, lastForecastSavedAt: savedAt, currentModelVersion: storedModelVersion, forecastFreshness: forecastFreshness(calculatedAt, calculationModelVersion), latestRun: run ? { postsRead: Number(run.posts_read ?? 0), newPostsScreened: Number(run.posts_inserted ?? 0), relevantPostsAnalyzed: Number(run.posts_analyzed ?? 0), forecastRecalculated: metadata.forecastRecalculated === true, forecastChanged: metadata.forecastChanged === true, forecastSaveReason: typeof metadata.forecastSaveReason === "string" ? metadata.forecastSaveReason : null } : null };
-  } catch { return { app: "ok", mode: "live", database: "unavailable", xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable", openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable", email: getEmailConfigurationStatus(), lastIngestionAt: null, lastForecastAt: null, lastForecastCalculatedAt: null, lastForecastSavedAt: null, currentModelVersion: null, forecastFreshness: "STALE", latestRun: null }; }
+    const calculatedCandidates = [
+      savedAt ? { at: savedAt, modelVersion: storedModelVersion } : null,
+      typeof attemptMetadata.forecastCalculatedAt === "string"
+        ? { at: attemptMetadata.forecastCalculatedAt, modelVersion: typeof attemptMetadata.forecastModelVersion === "string" ? attemptMetadata.forecastModelVersion : storedModelVersion }
+        : null,
+      typeof successMetadata.forecastCalculatedAt === "string"
+        ? { at: successMetadata.forecastCalculatedAt, modelVersion: typeof successMetadata.forecastModelVersion === "string" ? successMetadata.forecastModelVersion : storedModelVersion }
+        : null,
+    ].filter((item): item is { at: string; modelVersion: string | null } => Boolean(item) && Number.isFinite(Date.parse(item!.at)));
+    const latestCalculation = calculatedCandidates.sort((left, right) => Date.parse(right.at) - Date.parse(left.at))[0] ?? null;
+    const calculatedAt = latestCalculation?.at ?? null;
+    const calculationModelVersion = latestCalculation?.modelVersion ?? storedModelVersion;
+    const latestStatus = latestAttempt?.status === "success" || latestAttempt?.status === "failure" || latestAttempt?.status === "running"
+      ? latestAttempt.status
+      : null;
+    const storedCategory = typeof attemptMetadata.failureCategory === "string" ? attemptMetadata.failureCategory : null;
+    const allowedFailureCategories = new Set<IngestionFailureCategory>(["x_rate_limit", "x_authorization", "x_billing", "provider_timeout", "provider_network", "openai", "database", "unknown"]);
+    const failureCategory = latestStatus === "failure"
+      ? storedCategory && allowedFailureCategories.has(storedCategory as IngestionFailureCategory)
+        ? storedCategory as IngestionFailureCategory
+        : sanitizeIngestionFailure(latestAttempt?.error_message).category
+      : null;
+    const lastSuccessfulIngestionAt = latestSuccess?.completed_at ?? null;
+    const savedProbability = forecastResult.data?.probability == null ? null : Number(forecastResult.data.probability);
+    return {
+      app: "ok",
+      mode: "live",
+      database: "connected",
+      xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable",
+      openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable",
+      email: getEmailConfigurationStatus(),
+      sourceFreshness: sourceFreshness(lastSuccessfulIngestionAt),
+      lastIngestionAt: lastSuccessfulIngestionAt,
+      lastSuccessfulIngestionAt,
+      latestIngestionAttemptAt: latestAttempt?.completed_at ?? latestAttempt?.started_at ?? null,
+      latestIngestionResult: latestStatus,
+      latestIngestionFailureCategory: failureCategory,
+      newestStoredSourcePostAt: newestPostResult.data?.posted_at ?? null,
+      lastForecastAt: savedAt,
+      lastForecastCalculatedAt: calculatedAt,
+      lastForecastSavedAt: savedAt,
+      forecastDataCutoff: forecastResult.data?.data_cutoff ?? null,
+      latestSavedCalibratedProbability: savedProbability,
+      latestSavedRoundedPercent: savedProbability == null ? null : Math.round(savedProbability * 100),
+      currentModelVersion: storedModelVersion,
+      forecastFreshness: forecastFreshness(calculatedAt, calculationModelVersion),
+      latestRun: latestAttempt && latestStatus ? {
+        status: latestStatus,
+        postsRead: Number(latestAttempt.posts_read ?? 0),
+        newPostsScreened: Number(latestAttempt.posts_inserted ?? 0),
+        relevantPostsAnalyzed: Number(latestAttempt.posts_analyzed ?? 0),
+        forecastRecalculated: attemptMetadata.forecastRecalculated === true,
+        forecastChanged: attemptMetadata.forecastChanged === true,
+        forecastSaveReason: typeof attemptMetadata.forecastSaveReason === "string" ? attemptMetadata.forecastSaveReason : null,
+      } : null,
+    };
+  } catch {
+    return {
+      app: "ok",
+      mode: "live",
+      database: "unavailable",
+      xSource: process.env.X_BEARER_TOKEN ? "configured" : "unavailable",
+      openAI: process.env.OPENAI_API_KEY ? "configured" : "unavailable",
+      email: getEmailConfigurationStatus(),
+      sourceFreshness: "STALE",
+      lastIngestionAt: null,
+      lastSuccessfulIngestionAt: null,
+      latestIngestionAttemptAt: null,
+      latestIngestionResult: null,
+      latestIngestionFailureCategory: null,
+      newestStoredSourcePostAt: null,
+      lastForecastAt: null,
+      lastForecastCalculatedAt: null,
+      lastForecastSavedAt: null,
+      forecastDataCutoff: null,
+      latestSavedCalibratedProbability: null,
+      latestSavedRoundedPercent: null,
+      currentModelVersion: null,
+      forecastFreshness: "STALE",
+      latestRun: null,
+    };
+  }
 }
 
 export async function getPublicSnapshot(): Promise<PublicSnapshot> {

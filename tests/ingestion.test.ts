@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localExtract } from "@/lib/extraction/local";
 import type { Extraction } from "@/lib/extraction/schema";
 import { isAuthorizedCron } from "@/lib/ingestion/auth";
-import { deterministicForecastImpact, MAX_X_POSTS_PER_RUN, runIngestion, type ExtractionResult, type IngestionReport, type IngestionRepository, type StoredAccount, type StoredExtraction, type StoredPost } from "@/lib/ingestion";
+import { deterministicForecastImpact, MAX_X_POSTS_PER_RUN, runIngestion, type ExtractionResult, type IngestionFailureReport, type IngestionReport, type IngestionRepository, type StoredAccount, type StoredExtraction, type StoredPost } from "@/lib/ingestion";
 import type { Evidence, Forecast } from "@/lib/forecasting";
 import type { SocialAccount, SocialPost, SocialSourceAdapter } from "@/lib/social/adapters";
 
@@ -12,10 +12,10 @@ class MemoryRepository implements IngestionRepository {
   extractions: Array<{ post: StoredPost; result: ExtractionResult; forecastImpact: number }> = [];
   forecasts: Forecast[] = [];
   completed: IngestionReport[] = [];
-  failures: string[] = [];
+  failures: IngestionFailureReport[] = [];
   async startRun() { return `run-${this.completed.length + this.failures.length + 1}`; }
   async completeRun(_id: string, report: IngestionReport) { this.completed.push(report); }
-  async failRun(_id: string, input: { safeError: string }) { this.failures.push(input.safeError); }
+  async failRun(_id: string, input: IngestionFailureReport) { this.failures.push(input); }
   async findAccount() { return this.account; }
   async upsertAccount(account: SocialAccount) { this.account = { ...account, databaseId: "00000000-0000-4000-8000-000000000001" }; return this.account; }
   async findExistingPostIds(ids: string[]) { return new Set(ids.filter(id => this.posts.has(id))); }
@@ -104,12 +104,52 @@ describe("bounded live ingestion", () => {
 
   it("recalculates v2 even when no relevant evidence changes", async () => {
     const report = await runIngestion({ repository, source: new MemorySource([post("140", "ordinary lunch update")]), username: "thsottiaux", localExtract, extractRelevant: localResult, now: () => new Date("2026-07-10T00:00:00Z") });
+    expect(report.status).toBe("success");
+    expect(report.postsRead).toBe(1);
+    expect(report.postsInserted).toBe(1);
+    expect(report.postsAnalyzed).toBe(0);
     expect(report.forecastRecalculated).toBe(true);
     expect(report.forecastSaveReason).toBe("no_previous_forecast");
     expect(repository.forecasts).toHaveLength(1);
+    expect(repository.failures).toHaveLength(0);
     repository.account!.latestProcessedPostId = "140";
     await runIngestion({ repository, source: new MemorySource([post("141", "We will reset usage limits tomorrow")]), username: "thsottiaux", localExtract, extractRelevant: localResult, now: () => new Date("2026-07-10T00:15:00Z") });
     expect(repository.forecasts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("records a sanitized provider failure and recalculates from stored state without another provider call", async () => {
+    repository.account = { databaseId: "account-db", id: "x-account", username: "thsottiaux", displayName: "Tibo", latestProcessedPostId: "140" };
+    const fetchPosts = vi.fn(async () => {
+      throw new Error("X API request failed (429): Bearer should-never-appear");
+    });
+    const extractRelevant = vi.fn(localResult);
+    const source: SocialSourceAdapter = {
+      resolveAccount: vi.fn(),
+      fetchPosts,
+    };
+
+    await expect(runIngestion({
+      repository,
+      source,
+      username: "thsottiaux",
+      localExtract,
+      extractRelevant,
+      now: () => new Date("2026-07-23T05:00:00Z"),
+    })).rejects.toThrow("X API request failed");
+
+    expect(fetchPosts).toHaveBeenCalledTimes(1);
+    expect(extractRelevant).not.toHaveBeenCalled();
+    expect(repository.forecasts).toHaveLength(1);
+    expect(repository.failures[0]).toMatchObject({
+      failureCategory: "x_rate_limit",
+      safeError: "X source rate limit prevented this check",
+      forecastRecalculated: true,
+      forecastChanged: true,
+      forecastSaveReason: "no_previous_forecast",
+      forecastModelVersion: "reset-oracle-2.0.0",
+    });
+    expect(repository.failures[0].safeError).not.toContain("Bearer");
+    expect(repository.failures[0].safeError).not.toContain("should-never-appear");
   });
 
   it("stores ambiguous reset language for review without changing the forecast", async () => {

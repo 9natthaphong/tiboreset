@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { forecastFromEvidence, type Forecast, type ForecastContext } from "@/lib/forecasting";
-import { forecastFreshness, forecastSaveDecision, refreshCurrentForecast, type ForecastRefreshRepository, type StoredForecastSummary } from "@/lib/forecasting/current-refresh";
+import { forecastFreshness, forecastSaveDecision, refreshCurrentForecast, sourceFreshness, type ForecastRefreshRepository, type StoredForecastSummary } from "@/lib/forecasting/current-refresh";
 import { policyForecast, type MilestoneObservation } from "@/lib/forecasting/v2";
 
 const history: MilestoneObservation[] = [
@@ -94,5 +94,11 @@ describe("current v2 forecast refresh", () => {
     expect(forecastFreshness("2026-07-16T11:59:00Z", "reset-oracle-2.0.0", now)).toBe("STALE");
     expect(forecastFreshness("2026-07-16T13:00:00Z", "reset-oracle-1.1.0", now)).toBe("STALE");
   });
-});
 
+  it("marks source ingestion stale after two missed 15-minute schedule windows", () => {
+    const now = new Date("2026-07-23T05:00:00Z");
+    expect(sourceFreshness("2026-07-23T04:30:01Z", now)).toBe("FRESH");
+    expect(sourceFreshness("2026-07-23T04:15:00Z", now)).toBe("STALE");
+    expect(sourceFreshness(null, now)).toBe("STALE");
+  });
+});

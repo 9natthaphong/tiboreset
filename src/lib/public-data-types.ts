@@ -1,6 +1,7 @@
 import type { EventType, Evidence, Forecast } from "@/lib/forecasting";
 import type { ExternalContextEvent } from "@/lib/external-context";
 import type { HybridLikelihood, StructuredSignalType } from "@/lib/hybrid-likelihood";
+import type { IngestionFailureCategory } from "@/lib/ingestion/errors";
 
 export type PublicMode = "demo" | "live";
 
@@ -114,13 +115,22 @@ export type PublicHealth = {
   xSource: "configured" | "unavailable";
   openAI: "configured" | "unavailable";
   email: "disabled" | "configured" | "configuration_error";
+  sourceFreshness: "FRESH" | "STALE";
   lastIngestionAt: string | null;
+  lastSuccessfulIngestionAt: string | null;
+  latestIngestionAttemptAt: string | null;
+  latestIngestionResult: "success" | "failure" | "running" | null;
+  latestIngestionFailureCategory: IngestionFailureCategory | null;
+  newestStoredSourcePostAt: string | null;
   lastForecastAt: string | null;
   lastForecastCalculatedAt: string | null;
   lastForecastSavedAt: string | null;
+  forecastDataCutoff: string | null;
+  latestSavedCalibratedProbability: number | null;
+  latestSavedRoundedPercent: number | null;
   currentModelVersion: string | null;
   forecastFreshness: "FRESH" | "STALE";
-  latestRun: { postsRead: number; newPostsScreened: number; relevantPostsAnalyzed: number; forecastRecalculated: boolean; forecastChanged: boolean; forecastSaveReason: string | null } | null;
+  latestRun: { status: "success" | "failure" | "running"; postsRead: number; newPostsScreened: number; relevantPostsAnalyzed: number; forecastRecalculated: boolean; forecastChanged: boolean; forecastSaveReason: string | null } | null;
 };
 
 export type PublicSnapshot = {
