@@ -1,5 +1,6 @@
 import { forecastFromEvidence, type Evidence, type Forecast, type ForecastContext } from "@/lib/forecasting";
 import { MODEL_V2_VERSION, policyAlertBand } from "@/lib/forecasting/v2";
+import { classifyResetPolicyLanguage } from "@/lib/extraction/safety";
 
 export const FORECAST_MATERIALITY_THRESHOLD = 0.005;
 export const FORECAST_MAX_SNAPSHOT_AGE_MS = 60 * 60 * 1_000;
@@ -60,6 +61,23 @@ export function sourceFreshness(lastSuccessfulIngestionAt: string | null, now = 
   return Number.isFinite(age) && age >= 0 && age < SOURCE_FRESHNESS_AGE_MS ? "FRESH" : "STALE";
 }
 
+export function currentCycleEvidence(evidence: Evidence[], context: ForecastContext | undefined, cutoff: string): Evidence[] {
+  const cutoffTime = Date.parse(cutoff);
+  const latestReset = context?.verifiedResets
+    .filter(item => item.verified && Date.parse(item.occurredAt) <= cutoffTime)
+    .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0];
+  return evidence.filter(item => {
+    const postedAt = Date.parse(item.postedAt);
+    if (!Number.isFinite(postedAt) || postedAt > cutoffTime) return false;
+    if (!latestReset) return true;
+    if (postedAt > Date.parse(latestReset.occurredAt)) return true;
+    // A continuing-policy statement describes future cycles and is the sole
+    // intentional cross-cycle evidence exception. Completed and scheduled
+    // resolving announcements at the boundary are excluded.
+    return classifyResetPolicyLanguage(item.excerpt) === "continuation";
+  });
+}
+
 export async function refreshCurrentForecast(input: {
   repository: ForecastRefreshRepository;
   calculatedAt: string;
@@ -71,9 +89,10 @@ export async function refreshCurrentForecast(input: {
   // short-lived CLI/serverless runtimes while preserving the same cutoff.
   const evidence = await input.repository.loadForecastEvidence();
   const context = await input.repository.loadForecastContext?.();
+  const activeEvidence = currentCycleEvidence(evidence, context, input.calculatedAt);
   const previous = await input.repository.getLatestForecast();
   const forecast = forecastFromEvidence(
-    evidence,
+    activeEvidence,
     input.calculatedAt,
     input.horizonHours ?? Number(process.env.FORECAST_HORIZON_HOURS ?? 36),
     input.simulations,

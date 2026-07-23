@@ -109,7 +109,7 @@ function latestPostsFromCanonical(snapshot: LoadedCanonicalHybridSnapshot, limit
         signalReason: contribution?.reason ?? "No active structured signal.",
         recencyFactor: contribution?.recencyFactor ?? 0,
         exclusionReason: contribution?.exclusionReason ?? "irrelevant",
-        resetType: signal.signal.signalType === "reset_confirmation" && (signal.signal.resetType === "full" || signal.signal.resetType === "banked") ? signal.signal.resetType : null,
+        resetType: contribution?.exclusionReason === "previous_cycle_resolved" && (signal.signal.resetType === "full" || signal.signal.resetType === "banked" || signal.signal.resetType === "scheduled") ? signal.signal.resetType : null,
         resolvedAt: contribution?.exclusionReason === "previous_cycle_resolved" ? post.posted_at : null,
         cycleStatus: contribution?.exclusionReason === "previous_cycle_resolved" ? "previous_cycle_resolved" : contribution?.exclusionReason === "before_cycle_start" ? "historical" : "active_cycle",
         policyRegimeState: snapshot.hybrid.policyRegimeSourcePostId === post.platform_post_id ? snapshot.hybrid.policyRegimeState : undefined,
@@ -322,9 +322,11 @@ function historyFromForecasts(forecasts: Forecast[], evidence: Evidence[], resol
     ? [...forecasts, currentForecast]
     : forecasts;
   const resolvedIndex = resolvedReset
-    ? series.findIndex(forecast => resolvedReset.sourceRecordId
-      ? forecast.sourcePostIds.includes(resolvedReset.sourceRecordId)
-      : Date.parse(forecast.generatedAt) >= Date.parse(resolvedReset.occurredAt) && forecast.probability >= .98)
+    ? series.findIndex(forecast => resolvedReset.resetType === "scheduled"
+      ? Date.parse(forecast.generatedAt) >= Date.parse(resolvedReset.occurredAt)
+      : resolvedReset.sourceRecordId
+        ? forecast.sourcePostIds.includes(resolvedReset.sourceRecordId)
+        : Date.parse(forecast.generatedAt) >= Date.parse(resolvedReset.occurredAt) && forecast.probability >= .98)
     : -1;
   return series.map((forecast, index) => {
     const addedSourceId = forecast.sourcePostIds.find(id => !series[index - 1]?.sourcePostIds.includes(id));
@@ -332,13 +334,13 @@ function historyFromForecasts(forecasts: Forecast[], evidence: Evidence[], resol
     const previous = series[index - 1];
     const resolved = index === resolvedIndex ? resolvedReset : null;
     const isCurrent = currentForecast?.id === forecast.id;
-    return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: resolved ? "RESET RELEASED" : isCurrent && resolvedIndex >= 0 ? "Current next-cycle estimate" : item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: resolved?.sourceText ?? (isCurrent && resolvedIndex >= 0 ? "Cutoff-safe estimate using evidence posted after the latest reset." : item?.excerpt), eventType: resolved ? "explicit_reset_confirmation" : item?.eventType, evidencePostId: resolved?.sourcePostId ?? item?.postId, verified: resolved ? true : item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect, cyclePhase: resolvedIndex >= 0 && index > resolvedIndex ? "active" : "previous", resolvedResetAt: resolved?.occurredAt, resolvedResetSource: resolved?.sourceUrl, resolvedResetType: resolved?.resetType };
+    return { forecastId: forecast.id, time: forecast.generatedAt, probability: Math.round(forecast.probability * 100), low: Math.round(forecast.credibleIntervalLow * 100), high: Math.round(forecast.credibleIntervalHigh * 100), label: resolved ? resolved.resetType === "scheduled" ? "RESET ANNOUNCED" : "RESET RELEASED" : isCurrent && resolvedIndex >= 0 ? "Current next-cycle estimate" : item?.eventType.replaceAll("_", " ") ?? "Forecast update", excerpt: resolved?.sourceText ?? (isCurrent && resolvedIndex >= 0 ? "Cutoff-safe estimate using evidence posted after the latest reset." : item?.excerpt), eventType: resolved ? resolved.resetType === "scheduled" ? "milestone_commitment" : "explicit_reset_confirmation" : item?.eventType, evidencePostId: resolved?.sourcePostId ?? item?.postId, verified: resolved ? true : item?.verified, impact: previous ? Math.round((forecast.probability - previous.probability) * 100) : item?.effect, cyclePhase: resolvedIndex >= 0 && index > resolvedIndex ? "active" : "previous", resolvedResetAt: resolved?.occurredAt, resolvedResetSource: resolved?.sourceUrl, resolvedResetType: resolved?.resetType };
   });
 }
 
 function resolvedResetHistoryItem(reset: HybridResetEvent | null): ResetHistoryItem | null {
   if (!reset) return null;
-  return { id: `resolved-${reset.id}`, date: reset.occurredAt, type: reset.resetType, reason: "official_completed_reset", description: `Official completed ${reset.resetType} usage reset announcement.`, sourceUrl: reset.sourceUrl, included: true, verificationBadge: "verified", sourceAccount: "@thsottiaux", verificationStatus: "verified", historicalSource: "live", sourcePostId: reset.sourcePostId };
+  return { id: `resolved-${reset.id}`, date: reset.occurredAt, type: reset.resetType, reason: reset.resetType === "scheduled" ? "official_scheduled_reset_announcement" : "official_completed_reset", description: reset.resetType === "scheduled" ? "Official scheduled usage reset announcement; rollout timing was stated separately." : `Official completed ${reset.resetType} usage reset announcement.`, sourceUrl: reset.sourceUrl, included: true, verificationBadge: "verified", sourceAccount: "@thsottiaux", verificationStatus: "verified", historicalSource: "live", sourcePostId: reset.sourcePostId };
 }
 
 async function liveResetHistory(client: SupabaseClient): Promise<ResetHistoryItem[]> {

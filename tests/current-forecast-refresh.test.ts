@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { forecastFromEvidence, type Forecast, type ForecastContext } from "@/lib/forecasting";
-import { forecastFreshness, forecastSaveDecision, refreshCurrentForecast, sourceFreshness, type ForecastRefreshRepository, type StoredForecastSummary } from "@/lib/forecasting/current-refresh";
+import { forecastFromEvidence, type Evidence, type Forecast, type ForecastContext } from "@/lib/forecasting";
+import { currentCycleEvidence, forecastFreshness, forecastSaveDecision, refreshCurrentForecast, sourceFreshness, type ForecastRefreshRepository, type StoredForecastSummary } from "@/lib/forecasting/current-refresh";
 import { policyForecast, type MilestoneObservation } from "@/lib/forecasting/v2";
 
 const history: MilestoneObservation[] = [
@@ -86,6 +86,20 @@ describe("current v2 forecast refresh", () => {
     expect(second.forecastSaveReason).toBe("below_materiality_threshold");
     expect(repository.forecasts).toHaveLength(1);
     expect(repository.databaseReads).toBe(6);
+  });
+
+  it("excludes the resolving announcement from the next cycle while retaining continuing-policy evidence", () => {
+    const resolutionAt = "2026-07-21T16:47:15Z";
+    const nextCycleContext: ForecastContext = {
+      ...context,
+      verifiedResets: [...context.verifiedResets, { occurredAt: resolutionAt, milestoneUsers: 10_000_000, verified: true }],
+    };
+    const evidence: Evidence[] = [
+      { id: "policy", postId: "policy-row", postedAt: "2026-07-21T10:00:00Z", excerpt: "The resets will continue", eventType: "general_codex_update", confidence: .92, verified: true, url: "https://example.invalid/policy", effect: 0 },
+      { id: "resolution", postId: "resolution-row", postedAt: resolutionAt, excerpt: "New usage reset. Lands in the next hour.", eventType: "milestone_commitment", confidence: .96, verified: true, url: "https://example.invalid/resolution", effect: 0 },
+      { id: "new-cycle", postId: "new-row", postedAt: "2026-07-21T17:00:00Z", excerpt: "Codex usage capacity update", eventType: "general_codex_update", confidence: .8, verified: true, url: "https://example.invalid/new", effect: 0 },
+    ];
+    expect(currentCycleEvidence(evidence, nextCycleContext, "2026-07-21T18:00:00Z").map(item => item.id)).toEqual(["policy", "new-cycle"]);
   });
 
   it("reports freshness only for a recent v2 calculation", () => {

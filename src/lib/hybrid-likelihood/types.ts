@@ -1,7 +1,7 @@
 import type { Forecast } from "@/lib/forecasting";
 
 export type HybridState = "normal_cycle" | "imminent_commitment" | "new_cycle";
-export type WatchWinningChannel = "timing" | "policy_timing" | "live_signal" | "none" | "near_term_commitment";
+export type WatchWinningChannel = "timing" | "cycle_pressure" | "policy_timing" | "live_signal" | "none" | "near_term_commitment";
 export type StructuredSignalType =
   | "irrelevant"
   | "general_update"
@@ -45,7 +45,8 @@ export type HybridSignalInput = {
 export type HybridResetEvent = {
   id: string;
   occurredAt: string;
-  resetType: "full" | "banked";
+  resetType: "full" | "banked" | "scheduled";
+  resolutionKind?: "completed_execution" | "official_scheduled_announcement";
   verified: boolean;
   sourcePostId?: string;
   sourceRecordId?: string;
@@ -85,12 +86,15 @@ export type CycleEstimate = {
 };
 
 export type HybridLikelihood = CycleEstimate & {
-  watchModelVersion: "sacred-watch-2.0.0";
+  watchModelVersion: "sacred-watch-2.1.0";
   watchScore: number;
   hybridState: HybridState;
   cyclePoints: number;
   cycleMaturity: number;
   timingChannel: number;
+  cyclePressureChannel: number;
+  cyclePressureMethod: "expert_prior_maturity_horizon";
+  cyclePressureHorizonCoverage: number;
   policyTimingChannel: number;
   strongestSignalChannel: number;
   negativePenalty: number;

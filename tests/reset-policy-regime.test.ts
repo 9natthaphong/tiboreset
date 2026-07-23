@@ -44,7 +44,7 @@ describe("reset policy language screening", () => {
 describe("long-lived reset policy regime", () => {
   it("keeps high policy confidence separate from near-zero cycle maturity", () => {
     const result = calculateHybridLikelihood({ forecast, resetEvents: [reset], signals: [policySignal()], now: resetAt });
-    expect(result).toMatchObject({ watchModelVersion: "sacred-watch-2.0.0", hybridState: "new_cycle", policyRegimeState: "reset_policy_active", policyRegimeSourcePostId: "policy", policyRegimeConfidence: .92, cycleMaturity: 0, policyTimingChannel: 0, strongestSignalChannel: 0 });
+    expect(result).toMatchObject({ watchModelVersion: "sacred-watch-2.1.0", hybridState: "new_cycle", policyRegimeState: "reset_policy_active", policyRegimeSourcePostId: "policy", policyRegimeConfidence: .92, cycleMaturity: 0, cyclePressureChannel: 0, policyTimingChannel: 0, strongestSignalChannel: 0 });
     expect(result.watchScore).toBe(4);
     expect(result.watchScore).toBeLessThan(60);
     expect(result.activeSignals.find(item => item.postId === "policy")).toMatchObject({ bucket: "forecast_moving", readinessValue: 0 });

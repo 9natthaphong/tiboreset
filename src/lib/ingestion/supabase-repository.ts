@@ -193,7 +193,7 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
       verification_method: candidate.verificationMethod,
       rejection_reason: candidate.rejectionReason,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "source_post_id", ignoreDuplicates: true });
+    }, { onConflict: "source_post_id" });
     throwOnError(result.error, "Unable to persist milestone candidate");
     if (candidate.verificationStatus !== "verified" || candidate.resetType === "announcement_only") return;
     const reset = await this.client.from("known_reset_events").upsert({
@@ -257,7 +257,10 @@ export class SupabaseIngestionRepository implements IngestionRepository, Histori
     const nextTarget = latestUsers >= MILESTONE_TARGET_POLICY.finalPledgedTargetUsers ? null : base.nextPledgedMilestoneUsers;
     return {
       ...base,
-      verifiedResets: (result.data ?? []).filter(row => row.reset_type !== "scheduled").map(row => {
+      // Reset Oracle's outcome is the official announcement. A verified
+      // scheduled-reset announcement therefore closes the prior forecast at
+      // publication time even though account rollout happens later.
+      verifiedResets: (result.data ?? []).map(row => {
         const occurredAt = String(row.occurred_at);
         const canonical = base.verifiedResets.find(reset => Date.parse(reset.occurredAt) === Date.parse(occurredAt));
         return {

@@ -5,6 +5,7 @@ import type { HybridResetEvent, HybridSignalInput, StructuredSignal, WatchWinnin
 export type WatchScenarioRow = {
   scenario: string;
   timingChannel: number;
+  cyclePressureChannel: number;
   policyChannel: number;
   signalChannel: number;
   negativePenalty: number;
@@ -73,6 +74,7 @@ function row(input: {
   return {
     scenario: input.scenario,
     timingChannel: result.timingChannel,
+    cyclePressureChannel: result.cyclePressureChannel,
     policyChannel: result.policyTimingChannel,
     signalChannel: result.strongestSignalChannel,
     negativePenalty: result.negativePenalty,
@@ -93,13 +95,19 @@ export function buildWatchScenarioTable(): WatchScenarioRow[] {
   const completedAt = atHours(2);
   const completed = signal("completed", completedAt, { signalType: "reset_confirmation", operationalRelevance: "high", resetIntentStrength: 1, timeImmediacy: "immediate", extractionConfidence: .98, resetConfirmed: true, resetType: "full" });
   const completedReset: HybridResetEvent = { id: "completed", occurredAt: completedAt, resetType: "full", verified: true, sourcePostId: "completed" };
+  const expectedCycleHours = 24;
 
   return [
     row({ scenario: "Just after reset, no policy, no signals", probability: .03, now: currentResetAt }),
     row({ scenario: "Just after reset, active continuation policy", probability: .03, now: currentResetAt, signals: [policy] }),
-    row({ scenario: "Quarter cycle, active policy", probability: .12, now: atHours(6), signals: [policy] }),
-    row({ scenario: "Half cycle, active policy", probability: .2, now: atHours(12), signals: [policy] }),
-    row({ scenario: "Expected cycle reached, active policy", probability: .35, now: atHours(24), signals: [policy] }),
+    row({ scenario: "Quarter expected cycle, no policy", probability: .05, now: atHours(expectedCycleHours * .25) }),
+    row({ scenario: "Quarter expected cycle, active policy", probability: .12, now: atHours(expectedCycleHours * .25), signals: [policy] }),
+    row({ scenario: "Half expected cycle, no policy", probability: .08, now: atHours(expectedCycleHours * .5) }),
+    row({ scenario: "Half expected cycle, active policy", probability: .2, now: atHours(expectedCycleHours * .5), signals: [policy] }),
+    row({ scenario: "Expected cycle reached, no policy", probability: .1, now: atHours(expectedCycleHours) }),
+    row({ scenario: "Expected cycle reached, active policy", probability: .35, now: atHours(expectedCycleHours), signals: [policy] }),
+    row({ scenario: "One-and-a-half expected cycles, no policy", probability: .12, now: atHours(expectedCycleHours * 1.5) }),
+    row({ scenario: "One-and-a-half expected cycles, active policy", probability: .38, now: atHours(expectedCycleHours * 1.5), signals: [policy] }),
     row({ scenario: "Operator intervention without timing", probability: .08, now: atHours(2), signals: [operator] }),
     row({ scenario: "Operational work underway", probability: .18, now: atHours(2), signals: [working] }),
     row({ scenario: "Reset hint", probability: .22, now: atHours(2), signals: [hint] }),

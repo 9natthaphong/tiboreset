@@ -23,10 +23,10 @@ Codex users have limited capacity, and reset timing can change whether a develop
 - Screens obvious irrelevant posts locally before any model call.
 - Uses GPT-5.6 through the OpenAI Responses API to extract strict, reviewable evidence from candidate posts.
 - Blocks jokes, questions, metaphors, uncertain statements, and review-gated evidence from changing either metric automatically.
-- Calculates a primary Reset Watch Score from the maximum of calibrated timing, policy-timing, and strongest live-signal readiness, then applies negative evidence once. The score is not a probability.
+- Calculates a primary Reset Watch Score from the maximum of calibrated timing, independent elapsed-cycle pressure, policy-timing, and strongest live-signal readiness, then applies negative evidence once. The score is not a probability.
 - Preserves a clear official continuing-reset policy across cycle boundaries for up to seven days while moderating it by cycle maturity and age; there is no fixed policy floor.
 - Preserves Reset Oracle v2 as a separate calibrated 36-hour probability with a credible interval and 5,000 deterministic seeded simulations.
-- Resolves the previous cycle when a completed reset is verified, preserves the event for audit, and starts the next cycle immediately at zero cycle maturity.
+- Resolves the previous announcement forecast when a completed reset or bounded official scheduled-reset announcement is verified, preserves execution-versus-schedule semantics for audit, and starts the next cycle immediately at zero cycle maturity.
 - Exposes Forecast-moving and Screened out evidence, model provenance, resolved-event history, and active-cycle state through a public read-only Data Lab.
 
 ## How we built it
@@ -36,9 +36,9 @@ The product uses Next.js App Router and strict TypeScript. Supabase Postgres sto
 Candidate posts go to the OpenAI Responses API with a strict Zod-backed schema. GPT-5.6 returns evidence fields, never a final score. Deterministic TypeScript then calculates two distinct outputs:
 
 1. **Reset Oracle v2 calibrated probability:** a policy branch estimates pledged-milestone arrival and reset-given-milestone risk; a discretionary branch applies six-hour logistic hazards to current evidence. Five thousand seeded simulations produce the rolling 36-hour probability interval.
-2. **Reset Watch Score:** a separately versioned engine uses max-channel fusion so calibrated timing, policy-timing, and correlated live signals are not added together.
+2. **Reset Watch Score:** a separately versioned engine uses max-channel fusion so calibrated timing, elapsed-cycle pressure, policy-timing, and correlated live signals are not added together.
 
-A canonical snapshot keeps the homepage, charts, public API, Latest Signals, and Data Lab synchronized. A completed reset closes one cycle, records the resolved outcome, excludes pre-reset evidence, and begins the active next-reset forecast.
+A canonical snapshot keeps the homepage, charts, public API, Latest Signals, and Data Lab synchronized. An eligible official announcement closes one forecast cycle at publication, records whether rollout is completed or scheduled, excludes pre-cycle evidence, and begins the active next-announcement forecast.
 
 ## The role of OpenAI
 

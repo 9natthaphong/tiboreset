@@ -6,8 +6,8 @@ import { MODEL_V2_VERSION } from "@/lib/forecasting/v2";
 import { buildCanonicalHybridSnapshot, type CanonicalHybridSnapshot, type PersistedForecastReference } from "@/lib/hybrid-likelihood/canonical";
 import type { HybridResetEvent, HybridSignalInput } from "@/lib/hybrid-likelihood";
 import { structuredSignalFromStored } from "@/lib/extraction/structured-signal";
-import { hasExplicitCompletedOperationalReset } from "@/lib/extraction/safety";
 import { localExtract } from "@/lib/extraction/local";
+import { verifiedResetResolution } from "@/lib/reset-resolution";
 
 const postSchema = z.object({
   id: z.string(), platform_post_id: z.string(), text: z.string(), post_url: z.string().nullable(), posted_at: z.string(),
@@ -42,21 +42,20 @@ const asNumber = (value: unknown, fallback = 0) => typeof value === "number" && 
 
 function verificationStatus(post: z.infer<typeof postSchema>, event: z.infer<typeof eventSchema>) {
   const signal = structuredSignalFromStored({ text: post.text, eventType: event.event_type as EventType, payload: event.event_payload, confidence: event.extraction_confidence, requiresReview: event.requires_review === true });
-  const resetTypeEligible = signal.resetType === "full" || signal.resetType === "banked";
-  const completed = event.event_type === "explicit_reset_confirmation"
-    && signal.signalType === "reset_confirmation"
-    && signal.resetConfirmed
-    && resetTypeEligible
-    && event.requires_review !== true
-    && event.extraction_confidence >= .9
-    && hasExplicitCompletedOperationalReset(post.text);
+  const resolution = verifiedResetResolution({
+    text: post.text,
+    signal,
+    storedConfidence: event.extraction_confidence,
+    storedRequiresReview: event.requires_review === true,
+  });
+  const completed = resolution?.resolutionKind === "completed_execution";
   const verifiedPolicyContinuation = signal.signalType === "reset_policy_continuation"
     && signal.policyPersistence === "active"
     && signal.sourceAuthority === "monitored_official"
     && !signal.requiresReview
     && event.requires_review !== true
     && event.extraction_confidence >= .85;
-  return { signal, completed, verifiedPolicyContinuation };
+  return { signal, resolution, completed, verifiedPolicyContinuation };
 }
 
 function cutoffFrom(run: { completed_at?: unknown; metadata?: unknown } | null, forecast: { generated_at?: unknown } | null) {
@@ -157,16 +156,16 @@ export async function loadCanonicalHybridSnapshot(providedClient?: SupabaseClien
       continue;
     }
     const verified = verificationStatus(post, event);
-    const status = event.requires_review === true ? "needs_review" as const : verified.completed || verified.verifiedPolicyContinuation ? "verified" as const : "structured" as const;
+    const status = event.requires_review === true ? "needs_review" as const : verified.resolution || verified.verifiedPolicyContinuation ? "verified" as const : "structured" as const;
     const signal: HybridSignalInput = { id: event.id, postId: post.platform_post_id, text: post.text, postedAt: post.posted_at, sourceUrl: post.post_url ?? `https://x.com/i/status/${post.platform_post_id}`, signal: verified.signal, verificationStatus: status };
     signals.push(signal);
     postRecords.push({ ...post, extraction: event, signal });
     if (post.is_relevant && event.requires_review !== true && verified.signal.signalType !== "operator_intervention") evidence.push({ id: event.id, postId: post.id, postedAt: post.posted_at, excerpt: post.text, eventType: event.event_type as EventType, confidence: event.extraction_confidence, verified: status === "verified" || event.requires_review === false, sourceType: "official_x", url: signal.sourceUrl, effect: asNumber(event.event_payload.forecastImpact), commitmentStrength: asNumber(event.event_payload.commitment_strength), milestoneCurrent: typeof event.event_payload.milestone_current === "number" ? event.event_payload.milestone_current : null, milestoneTarget: typeof event.event_payload.milestone_target === "number" ? event.event_payload.milestone_target : null, incidentStrength: asNumber(event.event_payload.incident_strength), capacityConcern: asNumber(event.event_payload.capacity_concern), promotionalSignal: asNumber(event.event_payload.promotional_signal) });
-    if (verified.completed) derivedResets.push({ id: `extraction:${event.id}`, occurredAt: post.posted_at, resetType: verified.signal.resetType as "full" | "banked", verified: true, sourcePostId: post.platform_post_id, sourceRecordId: post.id, sourceUrl: signal.sourceUrl, sourceText: post.text, verificationSource: `${String(event.event_payload.extractionSource ?? "stored_extraction")}:${event.extraction_version}+deterministic_completed_text`, synchronizedKnownReset: knownSourceIds.has(post.id), synchronizedMilestone: milestonePostIds.has(post.platform_post_id) });
+    if (verified.resolution) derivedResets.push({ id: `extraction:${event.id}`, occurredAt: post.posted_at, resetType: verified.resolution.resetType, resolutionKind: verified.resolution.resolutionKind, verified: true, sourcePostId: post.platform_post_id, sourceRecordId: post.id, sourceUrl: signal.sourceUrl, sourceText: post.text, verificationSource: `${String(event.event_payload.extractionSource ?? "stored_extraction")}:${event.extraction_version}+${verified.resolution.verificationMethod}`, synchronizedKnownReset: knownSourceIds.has(post.id), synchronizedMilestone: milestonePostIds.has(post.platform_post_id) });
   }
-  const ledgerResets: HybridResetEvent[] = resetRows.filter(row => row.reset_type === "full" || row.reset_type === "banked").map(row => ({ id: row.id, occurredAt: row.occurred_at, resetType: row.reset_type as "full" | "banked", verified: row.verified, verificationSource: row.verification_notes ?? "known_reset_events", synchronizedKnownReset: true, synchronizedMilestone: false }));
-  const milestoneResets: HybridResetEvent[] = milestones.filter(row => row.reset_type === "full" || row.reset_type === "banked").map(row => ({ id: row.id, occurredAt: row.execution_at ?? row.announced_at, resetType: row.reset_type as "full" | "banked", verified: true, sourcePostId: row.source_post_id, sourceUrl: row.source_url, verificationSource: row.verification_method, synchronizedKnownReset: false, synchronizedMilestone: true }));
-  const resetEvents = [...ledgerResets, ...milestoneResets, ...derivedResets].filter((event, index, all) => index === all.findIndex(candidate => candidate.sourcePostId && event.sourcePostId ? candidate.sourcePostId === event.sourcePostId : Date.parse(candidate.occurredAt) === Date.parse(event.occurredAt)));
+  const ledgerResets: HybridResetEvent[] = resetRows.filter(row => row.reset_type === "full" || row.reset_type === "banked" || row.reset_type === "scheduled").map(row => ({ id: row.id, occurredAt: row.occurred_at, resetType: row.reset_type as "full" | "banked" | "scheduled", resolutionKind: row.reset_type === "scheduled" ? "official_scheduled_announcement" : "completed_execution", verified: row.verified, verificationSource: row.verification_notes ?? "known_reset_events", synchronizedKnownReset: true, synchronizedMilestone: false }));
+  const milestoneResets: HybridResetEvent[] = milestones.filter(row => row.reset_type === "full" || row.reset_type === "banked" || row.reset_type === "scheduled").map(row => ({ id: row.id, occurredAt: row.execution_at ?? row.announced_at, resetType: row.reset_type as "full" | "banked" | "scheduled", resolutionKind: row.reset_type === "scheduled" ? "official_scheduled_announcement" : "completed_execution", verified: true, sourcePostId: row.source_post_id, sourceUrl: row.source_url, verificationSource: row.verification_method, synchronizedKnownReset: false, synchronizedMilestone: true }));
+  const resetEvents = [...derivedResets, ...ledgerResets, ...milestoneResets].filter((event, index, all) => index === all.findIndex(candidate => candidate.sourcePostId && event.sourcePostId ? candidate.sourcePostId === event.sourcePostId : Date.parse(candidate.occurredAt) === Date.parse(event.occurredAt)));
   const context = mergeContext(versionedForecastContext(cutoff), resetRows, milestones, derivedResets, cutoff);
   let persistedForecast: PersistedForecastReference = null;
   let persistedForecasts: Exclude<PersistedForecastReference, null>[] = [];

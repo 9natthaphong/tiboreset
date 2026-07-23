@@ -13,6 +13,8 @@ const futureResetPattern = /\b(?:will|tomorrow|soon|scheduled|plan(?:ned)?|going
 const completedResetPattern = /\b(?:usage|weekly|rate)\s*limits?\s+(?:have|has|were|are|have now|are now)\s+(?:been\s+)?(?:reset|restored|refreshed)\b|\b(?:usage|quota|limits?)\s+(?:has|have|was|were)\s+(?:been\s+)?(?:reset|restored|refreshed)\b|\b(?:reset|banked reset)\s+(?:was|has been|is now)?\s*(?:added|granted|issued|completed|restored)\b|\benjoy\s+(?:the\s+)?reset\s+(?:usage|weekly|rate)?\s*limits?\b|\bwe\s+(?:have\s+)?(?:reset|restored|refreshed)\s+(?:usage|weekly|rate)?\s*limits?\b/i;
 const policyWithdrawalPattern = /\b(?:no\s+more\s+resets?|resets?\s+(?:will|are)\s+not\s+continue|resets?\s+are\s+stopping|stop\s+(?:the\s+)?resets?|cancel(?:led|ed)?\s+(?:the\s+)?resets?)\b/i;
 const policyContinuationPattern = /\b(?:the\s+)?resets?\s+(?:will\s+continue|are\s+continuing|continue(?:s)?|are\s+not\s+stopping)\b|\b(?:keep\s+(?:the\s+)?resets?\s+coming|continue\s+(?:the\s+)?resets?|continue\s+resetting|there\s+will\s+be\s+more\s+resets?|future\s+resets?|more\s+resets?)\b/i;
+const scheduledOperationalResetPattern = /\b(?:new\s+day,\s+new\s+)?(?:usage|weekly|rate|quota)?\s*reset\b|\b(?:usage|weekly|rate)\s*limits?\s+(?:will|are\s+going\s+to)\s+be\s+(?:reset|restored|refreshed)\b/i;
+const boundedFutureTimingPattern = /\b(?:lands?|arrives?|becomes?\s+available|rolls?\s+out)\s+(?:in|within)\s+(?:the\s+)?next\s+(?:(?:\d+|an?|one)\s+)?(?:minutes?|hours?)\b|\b(?:later\s+today|tomorrow|this\s+(?:morning|afternoon|evening))\b/i;
 
 export function hasAmbiguousResetLanguage(text: string): boolean {
   return playfulPattern.test(text) || uncertainPattern.test(text) || conditionalPattern.test(text) || questionPattern.test(text) || policyQuestionPattern.test(text) || policyUncertaintyPattern.test(text) || quotedPolicyPattern.test(text);
@@ -25,7 +27,15 @@ export function classifyResetPolicyLanguage(text: string): "continuation" | "wit
 }
 
 export function hasCredibleOperationalResetCommitment(text: string): boolean {
-  return !hasAmbiguousResetLanguage(text) && operationalObjectPattern.test(text) && commitmentPattern.test(text);
+  return !hasAmbiguousResetLanguage(text)
+    && ((operationalObjectPattern.test(text) && commitmentPattern.test(text))
+      || hasExplicitScheduledOperationalResetAnnouncement(text));
+}
+
+export function hasExplicitScheduledOperationalResetAnnouncement(text: string): boolean {
+  return !hasAmbiguousResetLanguage(text)
+    && scheduledOperationalResetPattern.test(text)
+    && boundedFutureTimingPattern.test(text);
 }
 
 export function hasExplicitCompletedOperationalReset(text: string): boolean {

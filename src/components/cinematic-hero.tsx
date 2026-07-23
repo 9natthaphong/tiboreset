@@ -36,6 +36,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
   const [loaderVisible, setLoaderVisible] = useState(true);
   const [loadProgress, setLoadProgress] = useState(12);
   const resetReleased = hybrid?.eventResolutionStatus === "resolved" && Boolean(hybrid.confirmation);
+  const scheduledResetAnnouncement = hybrid?.confirmation?.resetType === "scheduled";
   const resetTimes = hybrid?.confirmation ? formatResetEventTimes(hybrid.confirmation.occurredAt) : null;
 
   useLayoutEffect(() => {
@@ -332,10 +333,10 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
           <p className="hero-premise">Forecast the reset. Plan the next 36 hours of coding.</p>
         </div>
         {resetReleased && hybrid?.confirmation && resetTimes && <aside className="hero-event-status" data-testid="reset-release-status">
-          <span>RESET RELEASED</span>
-          <h2>Latest official reset</h2>
-          <dl><div><dt>Thailand</dt><dd>{resetTimes.thailand}</dd></div><div><dt>UTC</dt><dd>{resetTimes.utc}</dd></div><div><dt>Reset type</dt><dd>{hybrid.confirmation.resetType === "banked" ? "Banked usage reset" : "Full usage reset"}</dd></div></dl>
-          <p>An official completed reset announcement was detected. The forecast below now estimates the next reset cycle.</p>
+          <span>{scheduledResetAnnouncement ? "RESET ANNOUNCED" : "RESET RELEASED"}</span>
+          <h2>{scheduledResetAnnouncement ? "Latest official reset announcement" : "Latest official reset"}</h2>
+          <dl><div><dt>Thailand</dt><dd>{resetTimes.thailand}</dd></div><div><dt>UTC</dt><dd>{resetTimes.utc}</dd></div><div><dt>Reset type</dt><dd>{scheduledResetAnnouncement ? "Scheduled usage reset" : hybrid.confirmation.resetType === "banked" ? "Banked usage reset" : "Full usage reset"}</dd></div></dl>
+          <p>{scheduledResetAnnouncement ? "An official scheduled reset announcement resolved the previous forecast at publication. The forecast below estimates the next reset cycle." : "An official completed reset announcement was detected. The forecast below now estimates the next reset cycle."}</p>
           {hybrid.confirmation.sourceUrl && <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">Official source <ExternalLink size={13}/></a>}
         </aside>}
         <div className="hero-story-probability">
@@ -357,7 +358,7 @@ export function CinematicHero({ forecast, freshness, trend, latestKnownReset, la
         </dl>
         <div className="hero-story-payoff">
           {resetReleased && hybrid?.confirmation?.sourceUrl
-            ? <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">VIEW OFFICIAL RESET <ExternalLink size={15}/></a>
+            ? <a href={hybrid.confirmation.sourceUrl} target="_blank" rel="noreferrer">{scheduledResetAnnouncement ? "VIEW OFFICIAL ANNOUNCEMENT" : "VIEW OFFICIAL RESET"} <ExternalLink size={15}/></a>
             : <a href="#latest-signals">VIEW LATEST SIGNALS <ArrowDown size={15}/></a>}
           <span>{forecast.mode === "demo" ? "Demo mode" : `${freshness} · Live mode`}</span>
         </div>

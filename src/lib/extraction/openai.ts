@@ -3,7 +3,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { ExtractionSchema, type Extraction } from "./schema";
 import type { ExtractionResult } from "@/lib/ingestion";
 
-export const EXTRACTION_VERSION = "reset-extraction-1.3.0";
+export const EXTRACTION_VERSION = "reset-extraction-1.4.0";
 
 const systemPrompt = `You extract structured evidence from one public social post for RESET ORACLE.
 Analyze only the monitored official post supplied below. Do not invent missing parent, thread, image, or quoted-post context.
@@ -15,6 +15,7 @@ Do not infer a milestone unless the text explicitly supports it.
 Extract whether the user count is Codex-only, Codex plus ChatGPT Work, or unknown.
 Distinguish a completed full reset, a banked reset, a scheduled reset, and a milestone announcement with no reset.
 Distinguish generic assistance, operator intervention, operational work underway, a reset hint, a near-term commitment, and completed action.
+A monitored-official statement that explicitly announces an operational usage reset with a bounded rollout time, such as "New usage reset for paid users. Lands in the next hour", is a verified near_term_reset_commitment with reset_type scheduled. It resolves the reset-announcement forecast at publication time, but it is not a completed execution claim.
 A clear official statement such as "The resets will continue" is reset_policy_continuation: high policy relevance, low time immediacy, ongoing active policy, and not a reset confirmation.
 "Working on the next reset now" is operational_work_underway with higher immediacy. "I'll reset usage later today" is near_term_reset_commitment. "Usage limits have been reset" is reset_confirmation.
 "Will the resets continue?" is a question requiring review and zero automatic impact. "No more resets" is negative_or_delaying_signal with withdrawn policy persistence.

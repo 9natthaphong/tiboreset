@@ -146,18 +146,22 @@ describe("Reset Watch Score max-channel fusion", () => {
     expect(hero).not.toContain("LIVE RESET LIKELIHOOD");
   });
 
-  it("publishes a deterministic 13-case scenario table that separates policy confidence from timing", () => {
+  it("publishes deterministic scenarios that separate calibrated timing, cycle pressure, policy, and live signals", () => {
     const table = buildWatchScenarioTable();
-    expect(table).toHaveLength(13);
+    expect(table).toHaveLength(18);
     const justAfter = table.find(item => item.scenario === "Just after reset, active continuation policy");
+    const quarterNoPolicy = table.find(item => item.scenario === "Quarter expected cycle, no policy");
+    const halfNoPolicy = table.find(item => item.scenario === "Half expected cycle, no policy");
     const expectedCycle = table.find(item => item.scenario === "Expected cycle reached, active policy");
     const nearTerm = table.find(item => item.scenario === "Near-term reset commitment");
     const completed = table.find(item => item.scenario === "Completed reset");
-    expect(justAfter).toMatchObject({ policyChannel: 0, watchScore: 3, calibratedProbability: .03 });
+    expect(justAfter).toMatchObject({ cyclePressureChannel: 0, policyChannel: 0, watchScore: 3, calibratedProbability: .03 });
+    expect(quarterNoPolicy?.cyclePressureChannel).toBeGreaterThan(quarterNoPolicy?.timingChannel ?? 1);
+    expect(halfNoPolicy?.cyclePressureChannel).toBeGreaterThan(quarterNoPolicy?.cyclePressureChannel ?? 1);
     expect(expectedCycle?.policyChannel).toBeGreaterThan(.6);
-    expect(expectedCycle?.winningChannel).toBe("policy_timing");
+    expect(expectedCycle?.winningChannel).toBe("cycle_pressure");
     expect(nearTerm?.watchScore).toBe(95);
-    expect(completed).toMatchObject({ signalChannel: 0, watchScore: 3, calibratedProbability: .03 });
+    expect(completed).toMatchObject({ cyclePressureChannel: 0, signalChannel: 0, watchScore: 3, calibratedProbability: .03 });
   });
 
   it("keeps the frozen Reset Oracle v2 artifacts byte-for-byte unchanged", () => {

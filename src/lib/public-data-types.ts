@@ -28,7 +28,7 @@ export type LatestPost = {
   signalReason?: string;
   recencyFactor?: number;
   exclusionReason?: string | null;
-  resetType?: "full" | "banked" | null;
+  resetType?: "full" | "banked" | "scheduled" | null;
   resolvedAt?: string | null;
   cycleStatus?: "active_cycle" | "previous_cycle_resolved" | "historical";
   policyRegimeState?: "inactive" | "reset_policy_active" | "reset_policy_uncertain" | "reset_policy_withdrawn";
@@ -61,7 +61,7 @@ export type HistoryPoint = {
   cyclePhase?: "previous" | "active";
   resolvedResetAt?: string;
   resolvedResetSource?: string;
-  resolvedResetType?: "full" | "banked";
+  resolvedResetType?: "full" | "banked" | "scheduled";
 };
 
 export type ResetHistoryItem = {

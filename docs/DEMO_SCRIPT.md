@@ -15,11 +15,11 @@ Open <http://localhost:3000> and point out the **Demo Mode** label before using 
 
 ### 0:00–0:25 — Reset Released and the new cycle
 
-Open the production hero. Show the latest official completed reset, its timestamp and source, then explain that it resolved the previous forecast and immediately began a new active cycle.
+Open the production hero. Show the latest official forecast-resolving reset announcement, its timestamp, schedule/completion type, and source. Explain that the publication resolved the previous announcement forecast and immediately began a new active cycle without pretending scheduled rollout was completed execution.
 
 ### 0:25–0:45 — Policy, readiness, and probability
 
-Show the three separate readouts. **Reset Policy** reports whether official evidence supports continuing resets. **Reset Watch Score** reports operational readiness as `/ 100`, not a probability. **Reset Oracle v2** remains the calibrated next-36-hour estimate.
+Show the three separate readouts. **Reset Policy** reports whether official evidence supports continuing resets. **Reset Watch Score** reports operational readiness as `/ 100`, not a probability; its diagnostics separate calibrated timing, elapsed-cycle pressure, policy timing, and live signals. **Reset Oracle v2** remains the calibrated next-36-hour estimate.
 
 ### 0:45–1:05 — Calibrated 36-hour probability
 

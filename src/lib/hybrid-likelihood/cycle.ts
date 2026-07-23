@@ -1,6 +1,7 @@
 import type { CycleEstimate, HybridResetEvent } from "./types";
 
 const HOUR = 3_600_000;
+export const MAX_CYCLE_POINTS = 20;
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
   if (!sorted.length) return null;
@@ -62,5 +63,23 @@ export function estimateCycle(events: HybridResetEvent[], now: string): CycleEst
     cyclePoints: interpolateCyclePoints(elapsedCycleRatio),
     intervalSource,
     intervalSampleCount: intervals.length,
+  };
+}
+
+export function estimateCyclePressure(cycle: CycleEstimate, horizonHours = 36) {
+  const cycleMaturity = Math.min(1, Math.max(0, cycle.cyclePoints / MAX_CYCLE_POINTS));
+  const horizonCoverage = cycle.expectedCycleHours > 0
+    ? Math.min(1, Math.max(0, horizonHours / cycle.expectedCycleHours))
+    : 0;
+  // The verified interval history is still too sparse for a stable empirical
+  // conditional-survival curve. This transparent expert-prior proxy combines
+  // the existing monotonic cycle maturity with the share of an expected cycle
+  // covered by the forecast horizon. It is operational pressure, not a
+  // calibrated event probability.
+  return {
+    channel: Math.min(1, Math.max(0, cycleMaturity * horizonCoverage)),
+    cycleMaturity,
+    horizonCoverage,
+    method: "expert_prior_maturity_horizon" as const,
   };
 }

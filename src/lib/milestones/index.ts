@@ -46,7 +46,7 @@ export function parseMilestoneSignal(text: string): ParsedMilestoneSignal | null
   const denominator: MilestoneDenominator = hasCodex && hasWork ? "codex_and_chatgpt_work" : hasCodex ? "codex_only" : "unknown";
   let resetType: MilestoneResetType = "announcement_only";
   if (/\bbanked\s+reset\b|\breset\s+(?:was\s+)?(?:added|banked)\b/.test(lower)) resetType = "banked";
-  else if (/\b(?:will|would|scheduled to|going to)\s+(?:be\s+)?reset\b|\breset\s+(?:tomorrow|later|next|in\s+the\s+following)\b/.test(lower)) resetType = "scheduled";
+  else if (/\b(?:will|would|scheduled to|going to)\s+(?:be\s+)?reset\b|\breset\s+(?:tomorrow|later|next|in\s+the\s+following)\b|\b(?:usage\s+)?reset\b[\s\S]{0,140}\b(?:lands?|arrives?)\s+(?:in|within)\s+(?:the\s+)?next\s+(?:(?:\d+|an?|one)\s+)?(?:minutes?|hours?)\b/.test(lower)) resetType = "scheduled";
   else if (/\b(?:usage\s+)?limits?\s+(?:have\s+been|were|are now)\s+reset\b|\b(?:usage|quota)\s+(?:has\s+been|was)\s+reset\b|\breset\s+(?:is\s+)?confirmed\b/.test(lower)) resetType = "full";
   return { reportedActiveUsers, denominator, resetType, ambiguous: ambiguousPattern.test(text) };
 }

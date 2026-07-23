@@ -62,6 +62,7 @@ export function OracleExperience({ initialForecast, initialHybrid, hybridStatus:
   const currentProbability = Math.round(forecast.probability * 100);
   const trend = currentProbability > previousProbability ? "Rising" : currentProbability < previousProbability ? "Falling" : "Steady";
   const resetReleased = hybrid?.eventResolutionStatus === "resolved" && Boolean(hybrid.confirmation);
+  const scheduledResolution = hybrid?.confirmation?.resetType === "scheduled";
   const guidance = getUsageGuidance(hybrid ? hybrid.watchScore / 100 : forecast.probability, false);
   const latestResetTimes = hybrid?.confirmation ? formatResetEventTimes(hybrid.confirmation.occurredAt) : null;
   const currentMilestoneState = useMemo<PublicMilestoneState>(() => {
@@ -207,8 +208,8 @@ export function OracleExperience({ initialForecast, initialHybrid, hybridStatus:
     <section id="usage-plan" className={`usage-planning ${resetReleased ? "reset-available" : ""}`} data-band={guidance.band} data-testid="usage-guidance" data-editorial-section>
       <div data-reveal-heading>
         <p className="mono-label gold-label">QUOTA PLANNING</p>
-        <h2>{resetReleased ? "RESET AVAILABLE" : "SPEND. SAVE. OR QUEUE."}</h2>
-        <p>{resetReleased ? "An official reset announcement was detected. Verify that the reset is available on your account, then use the renewed capacity while the window is stable." : "Use capacity while the window is stable. Queue heavy agent runs when reset odds rise. Protect the quota that remains when evidence is weak."}</p>
+        <h2>{resetReleased ? scheduledResolution ? "RESET ANNOUNCED" : "RESET AVAILABLE" : "SPEND. SAVE. OR QUEUE."}</h2>
+        <p>{resetReleased ? scheduledResolution ? "An official near-term reset announcement was detected. Verify that rollout has reached your account before relying on renewed capacity." : "An official reset announcement was detected. Verify that the reset is available on your account, then use the renewed capacity while the window is stable." : "Use capacity while the window is stable. Queue heavy agent runs when reset odds rise. Protect the quota that remains when evidence is weak."}</p>
         {resetReleased && hybrid?.confirmation && latestResetTimes
           ? <span className="current-guidance">Released {latestResetTimes.thailand} · {latestResetTimes.utc}. Account availability may still vary.</span>
           : <span className="current-guidance">Current guidance · {guidance.title}: {guidance.guidance}</span>}
@@ -216,7 +217,7 @@ export function OracleExperience({ initialForecast, initialHybrid, hybridStatus:
       </div>
       <aside data-reveal-primary><span>{hybridStatus === "available" && hybrid ? `${hybrid.watchScore} / 100` : "—"}</span><b>{resetReleased ? "NEXT RESET CYCLE" : guidance.band}</b>{trend === "Rising" ? <TrendingUp/> : trend === "Falling" ? <TrendingDown/> : <Radio/>}</aside>
       {hybrid && <p className="why-watch-score" data-reveal-support><b>Why this score?</b>{hybrid.whyThisScore}</p>}
-      <small data-reveal-support>{resetReleased ? "The reset announcement is confirmed. The Watch Score estimates readiness in the next reset cycle." : "This is usage-planning guidance, not an official OpenAI announcement."}</small>
+      <small data-reveal-support>{resetReleased ? `${scheduledResolution ? "The scheduled reset announcement" : "The completed reset announcement"} is verified. The Watch Score estimates readiness in the next announcement cycle.` : "This is usage-planning guidance, not an official OpenAI announcement."}</small>
     </section>
 
     <section id="forecast" className="section forecast-section" data-editorial-section><header className="concise-heading" data-reveal-heading><div><p className="mono-label gold-label">THE FORECAST</p><h2>One answer. Three clear views.</h2></div><p>What changed, how certain it is, and what the model sees now.</p></header><div data-reveal-primary><Charts forecast={forecast} hybrid={hybrid} history={history} resetHistory={resetHistory} backtestSummary={backtestSummary}/></div></section>
@@ -294,17 +295,18 @@ function ResetHistory({ resetHistory, milestoneState, historicalDataset, mode }:
 
 function LatestPostCard({ post, mode, expanded, onToggle, now }: { post: LatestPost; mode: "demo" | "live"; expanded: boolean; onToggle: () => void; now: string }) {
   const readiness = post.signalReadiness ?? 0;
-  const resolvedReset = post.cycleStatus === "previous_cycle_resolved" && post.signalType === "reset_confirmation";
+  const resolvedReset = post.cycleStatus === "previous_cycle_resolved" && (post.signalType === "reset_confirmation" || post.signalType === "near_term_reset_commitment");
+  const scheduledResolution = resolvedReset && post.resetType === "scheduled";
   const activePolicy = post.signalType === "reset_policy_continuation" && post.policyRegimeState === "reset_policy_active";
   const historical = post.cycleStatus === "historical";
   const classification = post.needsReview ? "Context only" : post.signalType ? post.signalType.replaceAll("_", " ") : post.isRelevant ? post.eventType.replaceAll("_", " ") : "Screened as unrelated";
   const status = resolvedReset ? "Verified" : historical ? "Historical" : post.needsReview ? "Needs review" : post.verified ? "Verified" : post.isRelevant ? "Unverified" : "Screened";
   const negative = post.signalType === "negative_or_delaying_signal";
-  const result = resolvedReset ? "Completed confirmation" : activePolicy ? "Policy channel" : readiness > 0 ? "Readiness signal" : negative ? "Lowered" : "Contextual";
+  const result = resolvedReset ? scheduledResolution ? "Official announcement" : "Completed confirmation" : activePolicy ? "Policy channel" : readiness > 0 ? "Readiness signal" : negative ? "Lowered" : "Contextual";
   return <article className={`signal-card impact-${activePolicy || readiness > 0 ? "positive" : negative ? "negative" : "neutral"}`} data-testid="latest-post-card">
-    <header><span>{resolvedReset ? "RESET RELEASED" : activePolicy ? "RESET POLICY CONTINUES" : mode === "demo" ? "DEMO POST" : "@thsottiaux"}</span><time dateTime={post.postedAt}>{resolvedReset ? formatUtcTimestamp(post.postedAt) : relativeTime(post.postedAt, now)}</time></header>
+    <header><span>{resolvedReset ? scheduledResolution ? "RESET ANNOUNCED" : "RESET RELEASED" : activePolicy ? "RESET POLICY CONTINUES" : mode === "demo" ? "DEMO POST" : "@thsottiaux"}</span><time dateTime={post.postedAt}>{resolvedReset ? formatUtcTimestamp(post.postedAt) : relativeTime(post.postedAt, now)}</time></header>
     <div className="signal-card-body"><p className={expanded ? "expanded" : ""}>{post.text}</p><button type="button" className="expand-post" aria-expanded={expanded} onClick={onToggle}>{expanded ? "Show less" : "Read full post"} <ChevronDown size={14}/></button></div>
-    <div className="signal-card-result"><div className="signal-impact"><b>{resolvedReset ? "Previous cycle resolved" : activePolicy ? `Policy-timing ${Math.round((post.policyTimingChannel ?? 0) * 100)} / 100` : readiness === 0 ? "No active readiness" : `Readiness ${Math.round(readiness * 100)} / 100`}</b><span>{result}</span></div><div className="signal-classification"><b>{resolvedReset ? `${post.resetType === "banked" ? "Banked" : "Full"} reset` : activePolicy ? "Reset policy continuation" : classification}</b><span>{activePolicy ? "The monitored official account stated that resets will continue. This supports policy status but does not specify when the next reset will occur." : post.signalReason ?? (post.needsReview ? "Not used until reviewed" : post.isRelevant ? "Relevant signal" : "Local relevance screen")}</span></div></div>
+    <div className="signal-card-result"><div className="signal-impact"><b>{resolvedReset ? "Previous cycle resolved" : activePolicy ? `Policy-timing ${Math.round((post.policyTimingChannel ?? 0) * 100)} / 100` : readiness === 0 ? "No active readiness" : `Readiness ${Math.round(readiness * 100)} / 100`}</b><span>{result}</span></div><div className="signal-classification"><b>{resolvedReset ? scheduledResolution ? "Scheduled reset announcement" : `${post.resetType === "banked" ? "Banked" : "Full"} reset` : activePolicy ? "Reset policy continuation" : classification}</b><span>{activePolicy ? "The monitored official account stated that resets will continue. This supports policy status but does not specify when the next reset will occur." : post.signalReason ?? (post.needsReview ? "Not used until reviewed" : post.isRelevant ? "Relevant signal" : "Local relevance screen")}</span></div></div>
     <div className="signal-meta"><span>{post.wasAnalyzed ? `${Math.round(post.extractionConfidence * 100)}% extraction confidence` : "Local screen only"}</span><span className={post.verified ? "verified" : post.needsReview ? "ambiguous" : "screened"}>{status}</span></div>
     {activePolicy && <div className="signal-policy-meta"><span>Policy active</span><span>{Math.round((post.policyRegimeConfidence ?? 0) * 100)}% evidence confidence</span><span>{post.timeImmediacy ?? "low"} timing immediacy</span><span>{Math.round((post.policyRegimeDecayFactor ?? 0) * 100)}% policy decay factor</span>{post.watchCounterfactualDeltaPoints != null && <span>Watch counterfactual {post.watchCounterfactualDeltaPoints > 0 ? "+" : ""}{post.watchCounterfactualDeltaPoints} pts</span>}{post.probabilityCounterfactualDeltaPercentagePoints != null && <span>Calibrated counterfactual {post.probabilityCounterfactualDeltaPercentagePoints.toFixed(1)} pts</span>}</div>}
     <footer><span>{resolvedReset ? "Previous-cycle resolution · 0 active points" : post.exclusionReason ? `${post.exclusionReason.replaceAll("_", " ")} · decay ${Math.round((post.recencyFactor ?? 0) * 100)}%` : mode === "demo" ? "Synthetic fixture" : "Official X source"}</span><a className="source-action" href={post.url} target="_blank" rel="noreferrer" onClick={() => track("view_official_source")}>{resolvedReset ? "View official announcement" : mode === "demo" ? "Open demo evidence" : "View original post"} <ExternalLink size={13}/></a></footer>

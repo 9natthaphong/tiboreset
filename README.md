@@ -44,7 +44,7 @@ Codex users work within limited usage capacity. Reset timing can determine wheth
 ### Two metrics, three distinct questions
 
 - **Reset policy** asks whether current official evidence still supports continuing resets. Its confidence does not imply timing.
-- **Reset Watch Score** asks how elevated the current operational situation is. It uses the maximum of calibrated timing, policy-timing, and the strongest live-signal channel, then applies negative evidence once. It is not a probability and is not included in the historical Brier-score comparison.
+- **Reset Watch Score** asks how elevated the current operational situation is. It uses the maximum of calibrated timing, independent elapsed-cycle pressure, policy-timing, and the strongest live-signal channel, then applies negative evidence once. It is not a probability and is not included in the historical Brier-score comparison.
 - **Calibrated 36-hour probability** asks how likely Reset Oracle v2 estimates an official reset announcement is inside the next rolling 36 hours. It retains its credible interval, cutoff, model version, deterministic seed, and evidence provenance.
 
 ## Product tour
@@ -94,6 +94,8 @@ flowchart TD
     E --> R
     R --> C[Calibrated probability and interval]
     H --> Y[Reset Watch max-channel engine]
+    H --> CP[Cutoff-safe elapsed-cycle pressure]
+    CP --> Y
     E --> P[Reset policy state]
     P --> Y
     E --> Y
@@ -186,7 +188,7 @@ GPT-5.6 never outputs the Reset Watch Score or the calibrated probability. Deter
 
 ### Long-lived reset policy
 
-An explicit official statement that resets will continue is classified as `reset_policy_continuation`, not a hint, near-term commitment, or confirmation. Sacred Watch 2.0 keeps the newest compatible statement at full evidence strength for 72 hours, decays it until seven-day expiry, and lets a contradictory official statement supersede it immediately. Its policy-timing channel is `confidence × normalized cycle maturity × decay`; high policy confidence can therefore coexist with low readiness just after a reset. The lifetime and signal ceilings are transparent expert product priors, not statistically learned parameters.
+An explicit official statement that resets will continue is classified as `reset_policy_continuation`, not a hint, near-term commitment, or confirmation. Sacred Watch 2.1 keeps the newest compatible statement at full evidence strength for 72 hours, decays it until seven-day expiry, and lets a contradictory official statement supersede it immediately. Its policy-timing channel is `confidence × normalized cycle maturity × decay`; high policy confidence can therefore coexist with low readiness just after a reset. A separate elapsed-cycle pressure channel uses the same cutoff-safe maturity curve and verified cadence, so time can raise operational readiness even when policy is inactive. The lifetime, cycle-pressure transform, and signal ceilings are transparent expert product priors, not statistically learned parameters.
 
 ## Judge quick start
 

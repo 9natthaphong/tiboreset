@@ -4,8 +4,11 @@ import { loadCanonicalHybridSnapshot } from "../src/lib/canonical-hybrid-snapsho
 import { buildCanonicalHybridSnapshot } from "../src/lib/hybrid-likelihood/canonical";
 import { localExtract } from "../src/lib/extraction/local";
 import type { Evidence, EventType } from "../src/lib/forecasting";
+import { createMilestoneCandidate } from "../src/lib/milestones";
+import { verifiedResetResolution } from "../src/lib/reset-resolution";
+import { SupabaseIngestionRepository } from "../src/lib/ingestion/supabase-repository";
 
-const REPROCESS_VERSION = "reset-extraction-1.3.0+manual-local-reprocess-policy-v1";
+const REPROCESS_VERSION = "reset-extraction-1.4.0+manual-local-reprocess-resolution-v1";
 
 async function main() {
   loadEnvConfig(process.cwd());
@@ -22,24 +25,31 @@ async function main() {
   const record = snapshot.posts.find(post => post.platform_post_id === postId);
   if (!record) throw new Error(`Stored post ${postId} was not found`);
   const proposed = localExtract(record.text);
+  const proposedStructuredSignal = {
+    signalType: proposed.signal_type,
+    operationalRelevance: proposed.operational_relevance,
+    resetIntentStrength: proposed.reset_intent_strength,
+    operatorInterventionStrength: proposed.operator_intervention_strength,
+    timeImmediacy: proposed.time_immediacy,
+    sourceAuthority: "monitored_official" as const,
+    extractionConfidence: proposed.extraction_confidence,
+    requiresReview: proposed.requires_review,
+    uncertainties: proposed.uncertainties,
+    resetConfirmed: proposed.reset_confirmed,
+    resetType: proposed.reset_type,
+    policyScope: proposed.policy_scope,
+    policyPersistence: proposed.policy_persistence,
+  };
+  const proposedResolution = verifiedResetResolution({
+    text: record.text,
+    signal: proposedStructuredSignal,
+    storedConfidence: proposed.extraction_confidence,
+    storedRequiresReview: proposed.requires_review,
+  });
   const proposedSignal = {
     ...record.signal,
-    signal: {
-      signalType: proposed.signal_type,
-      operationalRelevance: proposed.operational_relevance,
-      resetIntentStrength: proposed.reset_intent_strength,
-      operatorInterventionStrength: proposed.operator_intervention_strength,
-      timeImmediacy: proposed.time_immediacy,
-      sourceAuthority: "monitored_official" as const,
-      extractionConfidence: proposed.extraction_confidence,
-      requiresReview: proposed.requires_review,
-      uncertainties: proposed.uncertainties,
-      resetConfirmed: proposed.reset_confirmed,
-      resetType: proposed.reset_type,
-      policyScope: proposed.policy_scope,
-      policyPersistence: proposed.policy_persistence,
-    },
-    verificationStatus: proposed.requires_review ? "needs_review" as const : "structured" as const,
+    signal: proposedStructuredSignal,
+    verificationStatus: proposed.requires_review ? "needs_review" as const : proposedResolution ? "verified" as const : "structured" as const,
   };
   const proposedEvidence: Evidence = {
     id: proposedSignal.id,
@@ -59,11 +69,23 @@ async function main() {
     capacityConcern: proposed.capacity_concern,
     promotionalSignal: proposed.promotional_signal,
   };
+  const proposedResetEvent = proposedResolution ? {
+    id: `preview:${record.id}`,
+    occurredAt: record.posted_at,
+    resetType: proposedResolution.resetType,
+    resolutionKind: proposedResolution.resolutionKind,
+    verified: true,
+    sourcePostId: record.platform_post_id,
+    sourceRecordId: record.id,
+    sourceUrl: proposedSignal.sourceUrl,
+    sourceText: record.text,
+    verificationSource: proposedResolution.verificationMethod,
+  } as const : null;
   const projected = buildCanonicalHybridSnapshot({
     cutoff: snapshot.cutoff,
     evidence: [...snapshot.evidence.filter(item => item.id !== proposedSignal.id), proposedEvidence],
     signals: snapshot.signals.map(item => item.postId === postId ? proposedSignal : item),
-    resetEvents: snapshot.resetEvents,
+    resetEvents: [...snapshot.resetEvents.filter(item => item.sourcePostId !== record.platform_post_id), ...(proposedResetEvent ? [proposedResetEvent] : [])],
     context: snapshot.context,
     persistedForecast: snapshot.persistedForecast,
     simulations: Number(process.env.MONTE_CARLO_SIMULATIONS ?? 5000),
@@ -78,10 +100,15 @@ async function main() {
     currentDerivedClassification: record.signal.signal.signalType,
     proposedEventType: proposed.event_type,
     proposedSignalType: proposed.signal_type,
+    proposedResetType: proposed.reset_type,
+    proposedResolution,
     proposedContribution: contribution,
     policyRegimeState: projected.hybrid.policyRegimeState,
     policyConfidence: projected.hybrid.policyRegimeConfidence,
     cycleMaturity: projected.hybrid.cycleMaturity,
+    currentCyclePressureChannel: snapshot.hybrid.cyclePressureChannel,
+    projectedCyclePressureChannel: projected.hybrid.cyclePressureChannel,
+    cyclePressureMethod: projected.hybrid.cyclePressureMethod,
     policyDecay: projected.hybrid.policyRegimeDecayFactor,
     policyTimingChannel: projected.hybrid.policyTimingChannel,
     winningChannel: projected.hybrid.maxWinningChannel,
@@ -117,8 +144,22 @@ async function main() {
     if (updated.error) throw updated.error;
     persisted = true;
   }
+  const candidate = createMilestoneCandidate({
+    text: record.text,
+    sourcePostId: record.platform_post_id,
+    sourceUrl: record.post_url ?? proposedSignal.sourceUrl,
+    sourceAccount: snapshot.account.username,
+    announcedAt: record.posted_at,
+  });
+  if (candidate && proposedResolution) {
+    const repository = new SupabaseIngestionRepository(client);
+    await repository.upsertMilestoneCandidate({
+      candidate,
+      post: { databaseId: record.id, platformPostId: record.platform_post_id },
+    });
+  }
   const refreshed = await loadCanonicalHybridSnapshot(client);
-  console.log(JSON.stringify({ persisted, extractionId, reason: persisted ? "corrected_extraction_inserted" : "idempotent_existing_extraction", canonicalSnapshotRefreshed: true, watchScore: refreshed.hybrid.watchScore, winningChannel: refreshed.hybrid.maxWinningChannel, calibratedProbability: refreshed.forecast.probability, policyRegimeState: refreshed.hybrid.policyRegimeState, policySourcePostId: refreshed.hybrid.policyRegimeSourcePostId }));
+  console.log(JSON.stringify({ persisted, extractionId, reason: persisted ? "corrected_extraction_inserted" : "idempotent_existing_extraction", milestoneSynchronized: Boolean(candidate && proposedResolution), canonicalSnapshotRefreshed: true, watchScore: refreshed.hybrid.watchScore, winningChannel: refreshed.hybrid.maxWinningChannel, calibratedProbability: refreshed.forecast.probability, cycleStartAt: refreshed.hybrid.cycleStartAt, elapsedCycleHours: refreshed.hybrid.elapsedCycleHours, cyclePressureChannel: refreshed.hybrid.cyclePressureChannel, policyTimingChannel: refreshed.hybrid.policyTimingChannel, timingChannel: refreshed.hybrid.timingChannel, policyRegimeState: refreshed.hybrid.policyRegimeState, policySourcePostId: refreshed.hybrid.policyRegimeSourcePostId }));
 }
 
 main().catch((error: unknown) => {
